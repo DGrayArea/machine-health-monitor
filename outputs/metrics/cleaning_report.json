@@ -1,5 +1,5 @@
 {
-  "source": "/Users/odeyalexander/Desktop/current/Web/machine-health-monitor/data/raw/ai4i2020.csv",
+  "source": "data/raw/ai4i2020.csv",
   "rows_raw": 10000,
   "duplicates_removed": 0,
   "missing": {

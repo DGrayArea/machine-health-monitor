@@ -276,7 +276,14 @@ def label_health(df: pd.DataFrame) -> pd.DataFrame:
 
 def clean(raw_path: Path) -> tuple[pd.DataFrame, dict]:
     """Run the whole pipeline and return the clean dataframe and a report."""
-    report: dict = {"source": str(raw_path)}
+    # Record the path relative to the repo root, not the absolute one. An
+    # absolute path pins the report to one machine and leaks a home directory
+    # into a file that gets committed.
+    try:
+        source = str(raw_path.resolve().relative_to(ROOT))
+    except ValueError:
+        source = raw_path.name
+    report: dict = {"source": source}
 
     df = load_raw(raw_path)
     report["rows_raw"] = len(df)
