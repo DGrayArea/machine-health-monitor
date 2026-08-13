@@ -1,48 +1,47 @@
 # Machine Health Monitoring / Predictive Maintenance
 
-A full-stack predictive maintenance system for a milling machine: it reads sensor
-data, classifies machine health as **Normal / Warning / Fault**, estimates the
-**remaining useful life** of the cutting tool, raises alerts with a recommended
-physical action, logs everything to an audit trail, and shows it all on a live
-dashboard.
+A predictive maintenance system for a milling machine. It reads sensor data,
+classifies the machine as Normal, Warning or Fault, estimates how much cutting
+life the tool has left, raises alerts with a recommended action, logs everything,
+and shows it on a live dashboard.
 
-Built as a mechatronics engineering project. Every threshold in it comes from
-documented machine physics, not from arbitrary numbers — the point is that you
-can defend each decision, not just demo it.
+Built as a mechatronics project. The thresholds all come from documented machine
+physics rather than numbers picked to make the results look good, so each one can
+be justified.
 
 ---
 
-## Table of contents
+## Contents
 
 1. [Quick start](#quick-start)
-2. [What it does end to end](#what-it-does-end-to-end)
+2. [How it fits together](#how-it-fits-together)
 3. [Units](#units)
-4. [Project structure](#project-structure)
+4. [Folder layout](#folder-layout)
 5. [Part 1 — Data](#part-1--data)
 6. [Part 2 — Model](#part-2--model)
-7. [Part 3 — Remaining Useful Life](#part-3--remaining-useful-life)
+7. [Part 3 — Remaining useful life](#part-3--remaining-useful-life)
 8. [Part 4 — Backend](#part-4--backend)
 9. [Part 5 — Alerts](#part-5--alerts)
 10. [Part 6 — Dashboard](#part-6--dashboard)
-11. [Part 7 — Authentication](#part-7--authentication)
-12. [Part 8 — Testing](#part-8--testing)
+11. [Part 7 — Login](#part-7--login)
+12. [Part 8 — Tests](#part-8--tests)
 13. [API reference](#api-reference)
 14. [Results](#results)
-15. [Questions you should be ready to answer](#questions-you-should-be-ready-to-answer)
-16. [Limitations](#limitations-be-honest-about-these)
+15. [Likely questions](#likely-questions)
+16. [Limitations](#limitations)
 17. [Troubleshooting](#troubleshooting)
 
 ---
 
 ## Quick start
 
-Requires Python 3.10+.
+Needs Python 3.10 or newer.
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
 ```
 
-Then run the pipeline in order — each step depends on the previous one:
+Run the pipeline. Each step needs the one before it:
 
 ```bash
 python data/download_data.py && python scripts/clean_data.py && python scripts/train_model.py && python scripts/evaluate_model.py && python scripts/train_rul_model.py
@@ -54,10 +53,10 @@ Start the server:
 uvicorn backend.main:app --reload --port 8010
 ```
 
-Open **http://127.0.0.1:8010** and sign in with `engineer` / `maintenance123`.
+Open http://127.0.0.1:8010 and log in with `engineer` / `maintenance123`.
 
-The simulator starts automatically, so readings begin appearing within a couple
-of seconds. Use the **Inject fault** buttons to force a red dashboard on demand.
+The simulator starts on its own, so readings appear after a second or two. The
+"Inject fault" buttons force a fault when you want to show one.
 
 Run the tests:
 
@@ -67,129 +66,128 @@ python -m pytest tests/ -v
 
 ---
 
-## What it does end to end
+## How it fits together
 
 ```
-  data/raw/ai4i2020.csv          10,000 rows of real machine sensor data
+  data/raw/ai4i2020.csv          10,000 rows of machine sensor data
           |
-          |  scripts/clean_data.py      dedupe, impute, drop implausible,
+          |  scripts/clean_data.py      dedupe, fill gaps, drop bad readings,
           v                             derive features, apply threshold rules
   data/processed/machine_health.csv     labelled Normal / Warning / Fault
           |
-          |  scripts/train_model.py     stratified 80/20, Random Forest
+          |  scripts/train_model.py     stratified 80/20 split, Random Forest
           v
   model/health_model.pkl                model + feature order + class order
           |
           v
-  +------------------- backend (FastAPI) --------------------+
+  +------------------ backend (FastAPI) ---------------------+
   |                                                          |
-  |  simulator.py  --> generates a physically coupled reading |
-  |        |                                                 |
-  |        v                                                 |
-  |  predictor.py  --> Random Forest: status + confidence     |
-  |        |                                                 |
-  |        v                                                 |
-  |  rul.py        --> remaining useful life (physics + trend) |
-  |        |                                                 |
-  |        v                                                 |
-  |  alerts.py     --> combine with physical threshold rules  |
-  |        |           (rules can escalate, never suppress)   |
-  |        v                                                 |
-  |  database.py   --> SQLite + append-only JSONL audit log   |
+  |  simulator.py  -> generates a physically coupled reading  |
+  |        |                                                  |
+  |  predictor.py  -> Random Forest: status + confidence       |
+  |        |                                                  |
+  |  rul.py        -> remaining tool life + wear-rate trend    |
+  |        |                                                  |
+  |  alerts.py     -> combine with the threshold rules         |
+  |        |                                                  |
+  |  database.py   -> SQLite + append-only JSONL audit log     |
   +----------------------------|-----------------------------+
                                v
-              frontend/  live dashboard, alert history,
-                         CSV / PDF report download
+              frontend/  dashboard, alert history,
+                         CSV / PDF download
 ```
 
 ---
 
 ## Units
 
-**Internally the system is strictly SI**: kelvin, watts, newton-metres. The
-dataset is in kelvin, the model was trained on kelvin, and the failure
-thresholds are quoted in kelvin. **Conversion to readable units happens only at
-the presentation layer** — the dashboard, the PDF and the CSV.
+Inside the system everything is SI: kelvin, watts, newton-metres. That is what
+the dataset uses and what the model was trained on. Conversion to friendlier
+units happens only where a person reads the number, meaning the dashboard, the
+PDF and the CSV.
 
-| Quantity | Stored / API | Displayed |
+| Quantity | Stored and sent over the API | Shown on screen |
 |---|---|---|
-| Air & process temperature | K | **°C** |
-| Temperature difference (ΔT) | K | **°C** (a *difference* of 10 K **is** 10 °C) |
-| Spindle power | W | **kW** |
+| Air and process temperature | K | °C |
+| Temperature difference (ΔT) | K | °C |
+| Spindle power | W | kW |
 | Torque | N·m | N·m |
 | Rotational speed | rpm | rpm |
-| Tool wear / RUL | min | min |
+| Tool wear and RUL | min | min |
 | Mechanical strain | min·N·m | min·N·m |
 
-Why convert at the edge instead of just storing Celsius everywhere? Because
-there is then exactly **one** place a unit can be wrong. If Celsius leaked into
-the feature vector, the model would receive `25.4` where it expects `298.5` and
-return a confident wrong answer with no error raised. Unit mismatches are silent
-— nothing crashes — which is what makes them dangerous. See
-[backend/units.py](backend/units.py); `tests/test_units.py` covers the
-conversions, including the one that is easiest to get wrong: subtracting 273.15
-from a temperature *difference*.
+One thing worth knowing when reading the code: a temperature *difference* of
+8.6 K is the same as 8.6 °C, because the offset cancels. That is why the constant
+is called `HDF_TEMP_DIFF_K` but the dashboard prints "8.6 °C" with the same
+number. Only absolute temperatures need the 273.15 shift.
 
-To POST 25 °C to the API, send `298.15`.
+Converting at the edge rather than storing Celsius everywhere keeps it to one
+place where a unit can go wrong. If Celsius reached the feature vector the model
+would get 25.4 where it expects 298.5 and return a wrong answer without any
+error. Unit bugs are quiet, which is what makes them expensive. The conversions
+live in [backend/units.py](backend/units.py) and are covered by
+`tests/test_units.py`.
+
+To send 25 °C to the API, post `298.15`.
 
 ---
 
-## Project structure
+## Folder layout
 
 ```
 machine-health-monitor/
 ├── data/
-│   ├── download_data.py        fetches the dataset (no API key needed)
+│   ├── download_data.py        fetches the dataset, no API key needed
 │   ├── raw/ai4i2020.csv        original 10,000-row dataset
-│   └── processed/              cleaned + labelled output
+│   └── processed/              cleaned and labelled output
 │
 ├── scripts/
-│   ├── clean_data.py           cleaning + labelling + RUL target
-│   ├── train_model.py          trains Random Forest (+ LogReg baseline)
-│   ├── evaluate_model.py       confusion matrix, plots, per-class metrics
-│   └── train_rul_model.py      RUL regressor + the negative result about it
+│   ├── clean_data.py           cleaning, labelling, RUL target
+│   ├── train_model.py          Random Forest and a Logistic Regression baseline
+│   ├── evaluate_model.py       confusion matrix, plots, per-class scores
+│   └── train_rul_model.py      RUL regressor and the measurements on it
 │
 ├── model/
 │   ├── health_model.pkl        trained classifier bundle
 │   ├── metadata.json           scores, feature importance, training config
-│   ├── rul_model.pkl           RUL regressor (optional cross-check)
+│   ├── rul_model.pkl           RUL regressor, used as a cross-check
 │   └── rul_metadata.json       RUL scores and uncertainty
 │
 ├── backend/
-│   ├── thresholds.py           ** all physical limits, ONE definition **
-│   ├── units.py                ** SI <-> display conversion, ONE place **
-│   ├── rul.py                  remaining useful life (physics + wear trend)
+│   ├── thresholds.py           every physical limit, defined once
+│   ├── units.py                SI to display conversion, defined once
+│   ├── rul.py                  remaining tool life and wear-rate trend
 │   ├── predictor.py            loads the models, runs inference
-│   ├── alerts.py               model + rules -> severity + action
-│   ├── simulator.py            physically coupled sensor simulator
-│   ├── database.py             SQLite + append-only audit log
-│   ├── auth.py                 PBKDF2 password hashing + JWT
-│   ├── reporting.py            CSV and PDF report generation
-│   ├── schemas.py              request/response validation
-│   ├── config.py               all settings, env-overridable
+│   ├── alerts.py               model plus rules to severity and action
+│   ├── simulator.py            sensor simulator with realistic coupling
+│   ├── database.py             SQLite and append-only audit log
+│   ├── auth.py                 PBKDF2 password hashing and JWT
+│   ├── reporting.py            CSV and PDF generation
+│   ├── schemas.py              request and response validation
+│   ├── config.py               settings, all overridable by env var
 │   └── main.py                 the API endpoints
 │
 ├── frontend/
-│   ├── index.html              login + dashboard markup
+│   ├── index.html              login and dashboard markup
 │   ├── styles.css              colour-coded status styling
 │   └── app.js                  polling, rendering, canvas chart
 │
 ├── tests/
-│   ├── test_alerts.py          alert + threshold logic (no model needed)
-│   ├── test_rul.py             RUL physics, wear-rate trend, RUL alert rule
+│   ├── test_alerts.py          alert and threshold logic, no model needed
+│   ├── test_rul.py             RUL physics, wear trend, RUL alert rule
 │   ├── test_units.py           unit conversions
-│   ├── test_api.py             endpoints, auth, audit trail, reports
-│   └── test_thresholds.py      offline labeller == live alerter
+│   ├── test_api.py             endpoints, login, audit trail, reports
+│   └── test_thresholds.py      offline labeller vs live alerter
 │
-└── outputs/                    ** everything the system generates **
-    ├── figures/                PNG plots from evaluate_model.py
-    ├── metrics/                JSON metrics (cleaning + evaluation)
-    ├── logs/                   monitoring.db + audit_log.jsonl
-    └── exports/                downloaded CSV / PDF reports
+└── outputs/                    everything the system generates
+    ├── figures/                plots from evaluate_model.py
+    ├── metrics/                JSON metrics
+    ├── logs/                   monitoring.db and audit_log.jsonl
+    └── exports/                reports downloaded from the dashboard
 ```
 
-Nothing generated is ever written next to source code — it all lands in
-`outputs/`, so you can delete that folder and rebuild it from scratch.
+Nothing generated is written next to source. Delete `outputs/` and the pipeline
+rebuilds it.
 
 ---
 
@@ -197,90 +195,90 @@ Nothing generated is ever written next to source code — it all lands in
 
 ### The dataset
 
-**AI4I 2020 Predictive Maintenance Dataset**, 10,000 rows. This is the same
-table Kaggle publishes as *"Machine Predictive Maintenance Classification"* —
-Kaggle mirrors it from the UCI Machine Learning Repository. `download_data.py`
-pulls from UCI because that needs no API token.
+AI4I 2020 Predictive Maintenance Dataset, 10,000 rows. Kaggle publishes the same
+table as "Machine Predictive Maintenance Classification"; it originally comes
+from the UCI repository. `download_data.py` pulls from UCI because that needs no
+API token.
 
 | Column | Meaning |
 |---|---|
-| `Type` | product quality tier: L / M / H |
-| `Air temperature [K]` | ambient temperature |
-| `Process temperature [K]` | temperature at the cutting process |
+| `Type` | product quality tier, L / M / H |
+| `Air temperature [K]` | ambient temperature, about 25 °C |
+| `Process temperature [K]` | temperature at the cutting process, about 35 °C |
 | `Rotational speed [rpm]` | spindle speed |
-| `Torque [Nm]` | spindle torque |
-| `Tool wear [min]` | cumulative minutes of cutting on the current tool |
-| `Machine failure` + `TWF/HDF/PWF/OSF/RNF` | ground-truth failure flags |
+| `Torque [Nm]` | spindle torque, N·m |
+| `Tool wear [min]` | minutes of cutting on the current tool |
+| `Machine failure` plus `TWF/HDF/PWF/OSF/RNF` | ground-truth failure flags |
 
-> **On "vibration and pressure":** this dataset does not contain those channels.
-> Rather than fabricate them, the system uses the five real ones. The pipeline is
-> channel-agnostic — adding a vibration sensor means adding one column in
-> `thresholds.py` and retraining, and nothing else changes.
+The dataset has no vibration or pressure channel. Rather than invent one, the
+system uses the five real channels. Nothing about the pipeline is specific to
+them, so adding a vibration sensor would mean adding a column in `thresholds.py`
+and retraining.
 
-### Cleaning (`scripts/clean_data.py`)
+### Cleaning
 
-1. **Rename** columns to snake_case.
-2. **Deduplicate** — comparing sensor values only, ignoring `UDI` and
-   `Product ID`. Those are row counters; two identical readings under different
-   IDs are still the same measurement and would double-weight the model.
-3. **Impute missing values** — numeric to the *median* (robust to the outliers we
-   are specifically trying to detect, unlike the mean), categorical to the
-   *mode*. We fill rather than drop, because a sensor dropout on one channel
-   should not throw away the other four.
-4. **Drop implausible readings** — negative torque, a stopped spindle, a
-   temperature below any plausible ambient. These are **sensor** faults, not
-   machine faults, and feeding them to the model teaches it nonsense.
-5. **Derive three features** that the failure physics is actually written in:
+`scripts/clean_data.py` does six things.
 
-   | Feature | Formula | Unit |
-   |---|---|---|
-   | `temp_diff` | `process_temp - air_temp` | K |
-   | `power` | `torque × ω`, where `ω = rpm × 2π/60` | W |
-   | `strain` | `tool_wear × torque` | min·Nm |
+1. Renames columns to snake_case.
+2. Removes duplicate rows, comparing sensor values only and ignoring `UDI` and
+   `Product ID`. Those are just row counters, and two identical readings logged
+   under different IDs are still one measurement.
+3. Fills missing values, numeric with the median and categorical with the mode.
+   The median is used because it is not dragged around by outliers, and outliers
+   are exactly what we are trying to detect. Filling rather than dropping means
+   one dead channel does not throw away the other four.
+4. Drops readings that break physics, such as negative torque or a stopped
+   spindle. Those are broken sensors, not broken machines, and training on them
+   teaches the model nonsense.
+5. Derives three features that the failure physics is actually written in.
 
-6. **Label** each row Normal / Warning / Fault.
+   | Feature | Formula | Stored as | Shown as |
+   |---|---|---|---|
+   | `temp_diff` | `process_temp - air_temp` | K | °C |
+   | `power` | `torque × ω`, with `ω = rpm × 2π/60` | W | kW |
+   | `strain` | `tool_wear × torque` | min·N·m | min·N·m |
 
-### The labelling logic
+6. Labels each row Normal, Warning or Fault.
 
-This is the part you must be able to defend. The dataset was generated from five
-documented physical failure modes, so we reuse *those exact thresholds* and
-define a Warning band just before each one:
+### How the labels are decided
 
-| Failure mode | **Fault** condition | **Warning** band (our margin) |
+The dataset was generated from five documented failure modes, so the same
+thresholds are reused and a Warning band is placed just before each one.
+
+| Failure mode | Fault condition | Warning band |
 |---|---|---|
-| Heat dissipation (HDF) | `ΔT < 8.6 K` **AND** `rpm < 1380` | `ΔT < 9.5 K` AND `rpm < 1500` |
-| Power (PWF) | `power < 3500 W` **OR** `> 9000 W` | `power < 4000 W` OR `> 8500 W` |
-| Overstrain (OSF) | `strain > 11000/12000/13000` (L/M/H) | `strain > 85%` of that limit |
-| Tool wear (TWF) | `tool_wear` in 200–240 min | `tool_wear > 180 min` |
-| Random (RNF) | 0.1% chance, unrelated to sensors | — |
+| Heat dissipation (HDF) | ΔT below 8.6 °C **and** speed below 1380 rpm | ΔT below 9.5 °C and speed below 1500 rpm |
+| Power (PWF) | power below 3.5 kW **or** above 9.0 kW | below 4.0 kW or above 8.5 kW |
+| Overstrain (OSF) | strain above 11000 / 12000 / 13000 min·N·m for L / M / H | above 85% of that limit |
+| Tool wear (TWF) | wear between 200 and 240 min | wear above 180 min |
+| Random (RNF) | 0.1% chance, nothing to do with the sensors | — |
 
-Two details worth pointing out:
+Two details are worth pointing out.
 
-- **The heat-dissipation rule is an AND, not an OR.** Cooling depends on forced
-  convection, so a small ΔT is only dangerous when the spindle is *also* turning
-  slowly. A test in `test_alerts.py` pins this down specifically.
-- **The overstrain limit depends on the quality tier.** The same
-  `strain = 12100 min·Nm` is a fault on an L-grade tool, a fault on M, and fine
-  on H.
+The heat dissipation rule is an AND, not an OR. Cooling relies on air being
+pushed over the spindle, so a small temperature difference only becomes dangerous
+when the spindle is also turning slowly. There is a test for this specifically.
 
-**Precedence:** Fault beats Warning beats Normal. A row is a Fault if the
-dataset's own `machine_failure` flag is set — we trust ground truth for the
-positive class rather than re-deriving it, because RNF failures are not
-predictable from the sensors at all.
+The overstrain limit depends on the quality tier. A strain of 12100 min·N·m is a
+fault on an L-grade tool and on an M-grade one, but fine on H.
 
-**Result:** 10,000 rows → 66.96% Normal, 29.65% Warning, 3.39% Fault.
+Fault beats Warning beats Normal. A row counts as a Fault if the dataset's own
+failure flag is set. We trust the ground truth for that class rather than
+re-deriving it, since RNF failures cannot be predicted from the sensors at all.
 
-### The honest caveat about the Warning class
+Result: 66.96% Normal, 29.65% Warning, 3.39% Fault.
 
-The Warning label is *deterministic* given the sensors, because we computed it
-from them. A model will therefore learn the Warning boundary almost perfectly.
+### One caveat about the Warning class
 
-That is not cheating — it is **rule distillation**. The value is that the same
-model also learns the **Fault** class, which is *not* a pure function of the
-sensors: it contains a random component (RNF) and a stochastic tool-breaking
-point somewhere in 200–240 min. **Fault recall is the number that measures real
-learning**, which is why `evaluate_model.py` reports it separately instead of
-hiding behind overall accuracy.
+The Warning label is worked out from the sensors, so it is a fixed function of
+them and a model will learn that boundary almost perfectly. That is not cheating,
+but it does mean the headline accuracy is flattering.
+
+The Fault class is different. It is not a clean function of the sensors: it
+contains a random component and a tool that breaks somewhere between 200 and 240
+minutes rather than at a fixed point. Fault recall is the number that shows
+whether the model learned anything, which is why `evaluate_model.py` reports it
+on its own instead of leaving it inside the overall accuracy.
 
 ---
 
@@ -288,409 +286,415 @@ hiding behind overall accuracy.
 
 ### Features
 
-`type_code, air_temp, process_temp, rot_speed, torque, tool_wear, temp_diff, power, strain`
+`type_code, air_temp, process_temp, rot_speed, torque, tool_wear, temp_diff,
+power, strain`
 
-Handing the model `power` and `strain` directly is the single biggest accuracy
-lever in the project. A decision tree splits on one variable at a time, so it
-would need a deep, brittle staircase of splits to approximate `torque × rpm`.
-Giving it the product turns that staircase into one clean split.
+Giving the model `power` and `strain` directly makes the biggest difference of
+anything in the project. A decision tree splits on one variable at a time, so it
+would need a deep and fragile staircase of splits to approximate `torque × rpm`.
+Handing it the product turns that into one clean split.
 
-`type_code` is **ordinal** (L=0, M=1, H=2) rather than one-hot, because product
-quality genuinely is ordered — the overstrain limit rises monotonically with it.
+`type_code` is ordinal (L=0, M=1, H=2) rather than one-hot, because the quality
+tiers really are ordered. The overstrain limit rises with them.
 
 ### Why Random Forest
 
-`train_model.py` trains a Logistic Regression baseline *and* a Random Forest, and
-prints both. The comparison is the argument, not decoration:
+`train_model.py` trains a Logistic Regression baseline alongside the forest and
+prints both, because the comparison is the argument for the choice.
 
-| Model | Accuracy | Macro F1 | **Fault F1** |
+| Model | Accuracy | Macro F1 | Fault F1 |
 |---|---|---|---|
-| Logistic Regression | 0.7170 | 0.5917 | **0.3630** |
-| **Random Forest** | **0.9920** | **0.9657** | **0.9120** |
+| Logistic Regression | 0.7170 | 0.5917 | 0.3630 |
+| Random Forest | 0.9920 | 0.9657 | 0.9120 |
 
 Logistic Regression draws one straight line per class. The failure rules are
-conjunctions (`ΔT low AND rpm low`) and two-sided bands (`power too low OR too
-high`) — shapes no single straight line can express. A Random Forest is a vote
-over many axis-aligned trees, which is exactly the shape of a threshold rule.
+conjunctions ("ΔT low AND rpm low") and two-sided bands ("power too low OR too
+high"), and no single straight line can express either. A Random Forest is a vote
+across many axis-aligned trees, which is the same shape as a threshold rule.
 
-### Handling the class imbalance
+### The class imbalance
 
-Fault is only 3.4% of rows. Two things address that:
+Fault is only 3.4% of the rows, so two things are needed.
 
-- **Stratified split** — a plain random 80/20 could hand the test set an
-  unrepresentative number of the 339 fault rows.
-- **`class_weight="balanced"`** — makes each Fault row count roughly 20× a Normal
-  row during training, so the model cannot score well by ignoring faults.
+The split is stratified, because a plain random 80/20 could easily leave the test
+set with an unrepresentative number of the 339 fault rows.
 
-Without these, a model that predicted "Normal" forever would already score 67%
-accuracy. **This is why accuracy alone proves nothing here.**
+`class_weight="balanced"` makes each Fault row count roughly 20 times a Normal
+one during training, so the model cannot score well by ignoring faults.
+
+Without both, a model that answered "Normal" every time would already reach 67%
+accuracy. That is why accuracy on its own proves nothing here.
 
 ### What gets saved
 
-`model/health_model.pkl` is a *bundle*, not a bare estimator:
+`model/health_model.pkl` holds a bundle rather than a bare estimator:
 
 ```python
 {"model": rf, "features": [...], "type_code": {...},
  "classes": [...], "trained_at": "..."}
 ```
 
-The backend rebuilds each input row against the saved `features` list rather than
-a hardcoded order. If you retrain with different features, the backend keeps
-working instead of silently feeding `torque` into the column the model thinks is
-`power` — which would give confident, completely wrong answers with no error.
+The backend rebuilds each input row against the saved `features` list instead of
+a hardcoded order. Retrain with a different feature set and the backend still
+works, rather than quietly feeding `torque` into the column the model thinks is
+`power` and returning a confident wrong answer.
 
 ---
 
-## Part 3 — Remaining Useful Life
+## Part 3 — Remaining useful life
 
-*"Is the machine healthy?"* is a classification question with three answers.
-*"How long have I got?"* is a regression question with a continuous answer — and
-a planner can schedule around "31 minutes" in a way they cannot around the word
-"Warning".
+"Is the machine healthy" is a classification question with three answers. "How
+long have I got" is a regression question with a continuous answer, and a planner
+can schedule around "31 minutes" in a way they cannot around the word "Warning".
 
-### Start with the honest constraint
+### The constraint to be upfront about
 
-Classical data-driven prognostics (the NASA C-MAPSS style) needs **run-to-failure
-trajectories**: many units, each logged from new until it dies. **AI4I 2020 does
-not have that.** Its 10,000 rows are independent samples with no unit id and no
-time ordering — you cannot follow one tool from new to worn. Inventing a "cycle"
-column and training an LSTM on it would produce an impressive number that means
-nothing.
+The usual data-driven approach to RUL, the NASA C-MAPSS style, needs
+run-to-failure trajectories: many units, each logged from new until it dies.
+AI4I 2020 does not have that. Its rows are independent samples with no unit ID
+and no time ordering, so you cannot follow one tool from new to worn. Adding a
+made-up "cycle" column and training an LSTM on it would give a good-looking
+number that means nothing.
 
-So this does prognostics the other legitimate way: **model-based
-(physics-of-failure)** rather than data-driven. Both are standard families in the
-prognostics literature, and model-based is the correct choice when you have known
-failure physics and no run-to-failure data.
+So this uses the other standard approach, model-based prognostics, working from
+the failure physics instead. That is the right family to pick when the physics is
+known and run-to-failure data is not available.
 
-### Layer 1 — the physics (authoritative)
+### Layer 1: the physics, and what the system actually uses
 
-Two constraints limit tool life, and **which one binds changes with load**:
+Two things limit tool life, and which one bites depends on the load.
 
 | Constraint | Remaining cutting minutes |
 |---|---|
 | Tool wear | `200 - tool_wear` |
-| Overstrain | `(osf_limit / torque) - tool_wear` |
+| Overstrain | `(limit / torque) - tool_wear` |
 
 RUL is the smaller of the two, floored at zero.
 
-**This is why RUL is not just `200 - tool_wear`.** Rearranging the overstrain
-condition `tool_wear × torque > limit` for the wear at which it trips gives a
-*ceiling that depends on torque*:
+This is why RUL is not simply `200 - tool_wear`. Rearranging the overstrain
+condition for the wear at which it trips gives a ceiling that moves with torque:
 
-| Tool wear | Torque | Ceiling | RUL | Binding |
+| Tool wear | Torque | Ceiling | RUL | What binds |
 |---|---|---|---|---|
-| 150 min | 40 N·m | 200 min | **50 min** | tool wear |
-| 150 min | 75 N·m | 160 min | **10 min** | overstrain |
+| 150 min | 40 N·m | 200 min | 50 min | tool wear |
+| 150 min | 75 N·m | 160 min | 10 min | overstrain |
 
-Same tool, same wear, five times less life — because cutting harder does not just
-consume the tool faster, **it lowers the ceiling**. No tool-wear threshold would
-ever tell you this. In the cleaned dataset, 452 of 10,000 rows are
-overstrain-bound: those are the ones a wear threshold alone would miss.
+Same tool, same wear, five times less life left. Cutting harder does not just use
+the tool up faster, it lowers the ceiling, and no tool-wear threshold would tell
+you that. In the cleaned dataset 452 rows out of 10,000 are overstrain-bound, and
+those are the ones a wear threshold on its own would miss.
 
-Deliberately excluded: cooling faults and power overloads. Those are
-*instantaneous* failure conditions, not wear mechanisms — they do not consume
-tool life, they end it. The alert rules already cover them.
+Cooling faults and power overloads are deliberately left out of RUL. They are
+instant failure conditions rather than wear mechanisms, so they do not eat tool
+life, they end it. The alert rules already handle them.
 
-### Layer 2 — the learned model, and why it lost
+### Layer 2: the learned model, and why it did not win
 
-`scripts/train_rul_model.py` trains a `RandomForestRegressor` on the same 9
-features. **We measured it and it does not beat the formula:**
+`scripts/train_rul_model.py` trains a `RandomForestRegressor` on the same nine
+features. It was measured and it does not beat the formula.
 
 | | MAE | RMSE | R² |
 |---|---|---|---|
-| Full model | **0.38 min** | 2.10 | 0.9989 |
+| Full model | 0.38 min | 2.10 | 0.9989 |
 | Without `tool_wear` | 49.64 min | 60.01 | 0.116 |
 
-An R² of 0.999 is **not an achievement here** — the target is a deterministic
-expression, so the forest is learning a division. `tool_wear` alone accounts for
-99.7% of feature importance. The spread across its 300 trees is essentially zero,
-because there is no noise in the target for them to disagree about:
+An R² of 0.999 is not an achievement here. The target is a fixed formula, so the
+forest is learning a division, and `tool_wear` accounts for 99.7% of the feature
+importance. The spread across the 300 trees is close to zero as well, because
+there is no noise in the target for them to disagree about.
 
-| Region | median σ |
+| Region | Median σ |
 |---|---|
 | All test rows | 0.00 min |
 | Tool-wear bound | 0.00 min |
-| **Overstrain bound** | **6.21 min** |
+| Overstrain bound | 6.21 min |
 
-The one region where the trees genuinely disagree is the boundary where the
-binding constraint switches — and there the model is visibly wrong. At 150 min /
-75 N·m the physics says **10.0 min** and the model says **25.9 ± 15.1 min**. The
-band is doing its job (it is wide, and it covers the truth), but the formula is
-simply correct.
+The only place the trees disagree is the boundary where the binding constraint
+switches, and there the model is visibly off. At 150 min and 75 N·m the physics
+gives 10.0 min while the model gives 25.9 ± 15.1 min. The band is behaving
+correctly, in that it is wide and it does cover the truth, but the formula is
+simply right.
 
-**So production uses the physics formula.** The regressor is reported as a
-cross-check on the dashboard and nothing depends on it — the API works with
-`rul_model.pkl` deleted. Being able to say that, with numbers, is worth more than
-shipping it uncritically.
+So the system uses the physics value. The regressor is shown on the dashboard as
+a cross-check and nothing depends on it; delete `rul_model.pkl` and the API still
+works.
 
-The second row of that table is the genuinely useful finding: strip out
-`tool_wear` and the error explodes 131×. **The tool-wear counter is load-bearing
-and has no redundancy** — if the encoder fails or the counter is reset wrongly,
-RUL must fall back to the formula, not to this model. That is a real design
-conclusion the exercise produced.
+The second row of that table is the finding worth keeping. Take `tool_wear` away
+and the error grows by a factor of 131. The tool-wear counter has no backup, so
+if the encoder fails or the counter is reset by mistake, RUL has to fall back to
+the formula rather than to this model.
 
-### Layer 3 — wall-clock projection
+### Layer 3: turning cutting minutes into clock time
 
-Layers 1 and 2 answer "how many minutes of *cutting* are left". An operator wants
-"how long until I have to stop". So `estimate_wear_rate` fits a least-squares
-slope to `tool_wear` over the last ~20 live readings — **measured**, not assumed.
+Layers 1 and 2 answer how many minutes of cutting are left. An operator wants to
+know how long until they have to stop. `estimate_wear_rate` fits a least-squares
+slope through `tool_wear` over the last 20 or so readings, so the rate is
+measured rather than assumed.
 
-Three details that matter:
+Three details matter here.
 
-- **It skips across tool changes.** Wear resets to zero on a tool change; fitting
-  across the reset would give a negative slope and a nonsense deadline, so only
-  the segment since the last reset is used.
-- **The window is ~20 readings.** Fit the whole buffer and the rate lags badly —
-  a machine that started cutting hard a minute ago still reports nominal, which
-  is exactly when you want the warning.
-- **It is normalised.** The simulator compresses time (a 1.5 s tick advances the
-  tool ~2.2 cutting minutes so a full tool life is watchable in ~2 min), so its
-  raw rate is ~88. Dividing by the nominal rate cancels the compression and
-  leaves the figure an engineer wants: **"we are wearing this tool 1.6× faster
-  than normal"**. The dashboard shows `1 h 59 min (wear 0.92× nominal)`.
+It skips over tool changes. Wear resets to zero when the tool is swapped, and
+fitting across that reset would give a negative slope and a nonsense answer, so
+only the readings since the last reset are used.
 
-The simulator's wear rate is load-dependent (a simplification of Taylor's tool
-life equation `V·Tⁿ = C`), so working the machine hard genuinely pulls the
-deadline in — the projection drops below the raw RUL under load and rises above
-it when running gently.
+The window is about 20 readings. Fit the whole buffer and the rate lags badly,
+so a machine that started cutting hard a minute ago still reports a normal rate,
+which is exactly when the warning is wanted.
+
+The rate is normalised. The simulator compresses time, advancing the tool about
+2.2 cutting minutes per 1.5 second tick so a full tool life is watchable in a
+couple of minutes. Its raw rate is therefore around 88, which is arithmetically
+right and useless on a screen. Dividing by the nominal rate cancels the
+compression and leaves something readable: "wearing this tool 1.6× faster than
+normal". The dashboard shows it as `1 h 59 min (wear 0.92× nominal)`.
+
+The simulator's wear rate depends on load, following the shape of Taylor's tool
+life equation, so working the machine hard genuinely pulls the deadline in. The
+projection drops below the raw RUL under load and sits above it when running
+gently.
 
 ### RUL as an alert
 
-The RUL rule fires **only when overstrain is the binding constraint**. When tool
-wear binds, the existing `tool_wear` threshold already says the same thing at
-180 min, and showing an operator two rows for one problem is how alert lists stop
-being trusted. The overstrain-bound case is the gap nothing else catches.
+The RUL rule only fires when overstrain is the binding constraint. When tool wear
+binds, the existing wear threshold already says the same thing at 180 minutes,
+and showing an operator two rows for one problem is how alert lists stop getting
+read. The overstrain case is the gap nothing else covers.
 
 ---
 
 ## Part 4 — Backend
 
 FastAPI, chosen because Pydantic validates every payload before it reaches your
-code and `/docs` gives you interactive API documentation for free.
+code and `/docs` gives interactive API documentation for free.
 
-| Module | Responsibility |
+| Module | What it does |
 |---|---|
-| `thresholds.py` | every physical limit — imported by *both* the offline cleaner and the live API |
-| `predictor.py` | loads the model once at startup, runs inference |
-| `alerts.py` | combines model verdict + threshold rules into a severity and an action |
-| `simulator.py` | generates physically coupled fake readings |
-| `database.py` | SQLite (queryable) + JSONL (append-only) audit trail |
-| `auth.py` | PBKDF2 hashing, JWT issue/verify |
+| `thresholds.py` | every physical limit, imported by both the offline cleaner and the live API |
+| `units.py` | the one place SI values are converted for display |
+| `rul.py` | remaining tool life and the wear-rate trend |
+| `predictor.py` | loads the models once at startup and runs inference |
+| `alerts.py` | combines the model verdict with the threshold rules |
+| `simulator.py` | generates fake readings with realistic coupling |
+| `database.py` | SQLite plus an append-only JSONL log |
+| `auth.py` | PBKDF2 hashing, JWT issue and verify |
 | `reporting.py` | CSV and PDF generation |
 
-### One definition of the thresholds
+### Thresholds defined once
 
 `scripts/clean_data.py` imports its constants from `backend/thresholds.py`. If
-the offline labeller used one set of thresholds and the live alerter used
-another, the model would be *trained* to detect one thing and *deployed* to
-explain a different thing — a silent, extremely hard-to-debug bug.
-`tests/test_thresholds.py` runs both code paths over all 10,000 rows and asserts
-they flag identical rows.
+the offline labeller used one set of numbers and the live alerter used another,
+the model would be trained to spot one thing and deployed to explain something
+slightly different. That is a quiet bug and a horrible one to track down, so
+`tests/test_thresholds.py` runs both code paths over all 10,000 rows and checks
+they flag the same ones.
 
-### The sensor simulator
+### The simulator
 
-Independent random numbers would never produce a realistic fault, because real
-faults come from **coupling** between channels. The simulator reproduces three
-couplings that exist on a real spindle:
+Independent random numbers would never produce a believable fault, because real
+faults come from channels affecting each other. The simulator reproduces three
+couplings that exist on a real spindle.
 
-1. **Constant-power drive** — `rpm = P / torque × 60/2π`. A heavier cut *slows*
-   the spindle.
-2. **Wear raises torque** — a blunt tool needs more force, which (via #1) drags
-   rpm down and pushes `strain` toward the overstrain limit.
-3. **Low rpm worsens cooling** — less airflow, so ΔT shrinks, which is the
-   heat-dissipation failure condition.
+The drive holds power roughly constant, so `rpm = P / torque × 60/2π` and a
+heavier cut slows the spindle down.
 
-So faults arrive as a **cascade**, the way they do on a real machine. You can see
-this in the screenshot below: an injected cooling fault dropped rpm to 974, which
-raised torque to 62 Nm, which pushed strain to 14413 min·Nm — over the 12000
-limit — tripping a second, different failure mode.
+A blunt tool needs more force, so torque climbs with wear, which through the
+first coupling drags rpm down and pushes strain towards the overstrain limit.
 
-A tool change resets wear to 0 and the cycle restarts, so a long demo shows
-repeated tool-life cycles.
+Lower rpm means less airflow, so ΔT shrinks, which is the heat dissipation
+failure condition.
 
-### Audit trail
+Faults therefore arrive as a cascade, the way they do on a real machine. In
+testing, an injected cooling fault dropped rpm to 974, which raised torque to
+62 N·m, which pushed strain to 14413 min·N·m and tripped a second, different
+failure mode.
 
-Every prediction and alert goes to **two** sinks:
+A tool change resets wear to zero and the cycle starts again, so a long demo
+shows repeated tool lives.
 
-- **SQLite** (`outputs/logs/monitoring.db`) — queryable; the alert history and
-  the downloadable reports are SQL queries against it.
-- **JSONL** (`outputs/logs/audit_log.jsonl`) — append-only, one JSON object per
-  line, never updated or deleted. If the database is tampered with, the flat log
-  still shows what the system actually saw and said.
+### The audit trail
 
-Login attempts are logged too. In maintenance work this is not optional: if the
-machine breaks and the system said "Normal" five minutes earlier, you must be
-able to prove exactly what readings it was given.
+Every prediction and alert is written twice.
+
+SQLite (`outputs/logs/monitoring.db`) is queryable, and the alert history and the
+downloadable reports are both queries against it.
+
+JSONL (`outputs/logs/audit_log.jsonl`) is append-only, one JSON object per line,
+never updated or deleted. If the database is tampered with, the flat log still
+shows what the system saw and what it said.
+
+Login attempts are logged too. For maintenance work this is not optional. If the
+machine breaks and the system said "Normal" five minutes earlier, you need to be
+able to show exactly what readings it was given.
 
 ---
 
 ## Part 5 — Alerts
 
-### The core design decision
+### How the model and the rules combine
 
-An alert is **not** just "whatever the model said". It combines two independent
-sources of evidence, and the combination rule is:
+An alert is not just whatever the model said. It combines two independent sources
+of evidence, and the rule is that the thresholds can escalate the model but the
+model can never overrule a threshold. Effective severity is the worse of the two.
 
-> **The rules can escalate the model. The model can never suppress the rules.**
-> Effective severity = the worst of the two.
+The reasoning: a hard physical limit is a fact, not a prediction. If the model has
+a bad moment and says "Normal" while the spindle is drawing 9.5 kW, the operator
+still needs to be told. Safety interlocks work the same way, in that a learned
+layer can add sensitivity but never gets to switch off a hard limit.
 
-Why: a hard physical limit (power above 9 kW, tool past its life) is a *fact*,
-not a prediction. If the model has a bad day and says "Normal" while the spindle
-draws 9.5 kW, the operator must still be told. Machine safety interlocks work the
-same way — a learned layer may add sensitivity, but it is never allowed to
-override a hard limit.
+The other direction is allowed, and it is the genuinely predictive part. If every
+threshold is inside limits but the model recognises a combination that tends to
+come before failures, it raises a Warning by itself. Thresholds cannot do that.
+It shows up in the generated PDF as "Model-detected warning condition".
 
-The reverse direction is allowed and is the genuinely predictive part: if every
-threshold is inside limits but the model recognises a combination that precedes
-failures, it raises a Warning on its own. Thresholds alone cannot do that. You
-can see this in the generated PDF as *"Model-detected warning condition"*.
-
-### Severity ladder
+### Severity
 
 | Model status | Severity | Meaning |
 |---|---|---|
-| Normal | — | no alert raised, nothing logged |
-| Warning | `Warning` | plan a fix; the machine keeps running |
-| Fault | `Critical` | act now; the machine should stop |
+| Normal | — | no alert, nothing logged |
+| Warning | Warning | plan a fix, the machine keeps running |
+| Fault | Critical | act now, the machine should stop |
 
 ### Recommended actions
 
-Every alert carries a concrete physical instruction, taken from the most urgent
-rule that tripped, so it names the actual component:
+Every alert carries a physical instruction taken from the most urgent rule that
+tripped, so it names the actual component.
 
 | Condition | Recommended action |
 |---|---|
 | Heat dissipation failure | Stop the machine. Check coolant flow, clean the heat exchanger and verify the cooling fan is running before restart. |
 | Cooling margin low | Inspect coolant level and airflow path. Raise spindle speed to improve forced convection if the process allows. |
-| Power overload | Reduce load immediately — cut feed rate or depth of cut. Check for a blunt tool or incorrect material. |
-| Power underrun | Check the drive coupling and belt tension — the spindle may be slipping or running unloaded. |
+| Power overload | Reduce load immediately, cutting feed rate or depth of cut. Check for a blunt tool or incorrect material. |
+| Power underrun | Check the drive coupling and belt tension, the spindle may be slipping or running unloaded. |
 | Mechanical overstrain | Stop and replace the tool. Inspect the spindle bearing and tool holder for damage before resuming. |
 | Approaching overstrain | Reduce load or change the tool early. Inspect the bearing at the next available stop. |
 | Tool life exceeded | Replace the cutting tool now. Do not start another cycle. |
 | Tool nearing end of life | Schedule a tool change within the next N minutes of cutting. |
+| Tool life shortened by high load | Reduce torque to extend tool life, or schedule a change within N minutes. |
 
-If several rules trip at once, the message names the secondary ones too — so
-nobody fixes one thing and declares victory. A test asserts that **no alert can
-ever be raised without an actionable instruction**.
+If several rules trip at once the message names the others too, so nobody fixes
+one thing and assumes they are done. A test checks that no alert can be raised
+without an instruction attached.
 
 ---
 
 ## Part 6 — Dashboard
 
-Plain HTML/CSS/JS. No framework, no build step, no CDN — you can read every line
-that puts a pixel on the screen, which matters when you have to explain it.
+Plain HTML, CSS and JavaScript. No framework, no build step, no CDN, so every
+line that puts something on the screen can be read directly.
 
-- **Colour-coded status** — green / amber / red maps directly onto
-  Normal / Warning / Fault. The Fault dot pulses; the browser tab title changes
-  to `(Fault) Machine Health Monitor` so you notice it in a background tab.
-- **Eight live tiles** — the five raw channels plus the three derived ones, each
-  with a fill bar and its own limit annotation. Tile colours come from the same
-  thresholds the backend uses.
-- **Recommended action card** — appears only when there is something to do,
-  showing the tripped rule, the measured value vs the limit, and the action.
-- **Trend chart** — hand-drawn on a `<canvas>`. Power, ΔT and tool wear are
-  normalised into one plot area because they have wildly different units; this is
-  a *shape* comparison, and the tiles carry exact values. Below it, a status
-  strip colours one bar per reading, making the Normal → Warning → Fault
-  progression readable at a glance.
-- **Alert history** — time, severity, condition, measured value vs limit, action.
-- **Report download** — CSV or PDF.
-- **Simulator controls** — start/stop, plus inject buttons to force a cooling
-  fault, a power overload, or a worn tool on cue for a live demo.
+The status is colour-coded, with green, amber and red mapping onto Normal,
+Warning and Fault. The Fault dot pulses and the browser tab title changes to
+"(Fault) Machine Health Monitor" so it is noticeable in a background tab.
 
-**Why polling, not WebSockets:** the simulator emits one reading every 1.5 s. At
-that rate a WebSocket saves almost nothing but adds reconnect logic, heartbeats
-and a second code path to debug. If a poll fails, the next one simply succeeds.
+Eight tiles show the five raw channels and the three derived ones, each with a
+fill bar and its own limit written underneath. The colours come from the same
+thresholds the backend uses, and the bands are evaluated on the raw SI value so a
+display change cannot pull them out of step.
 
-**Why downloads go through `fetch()`:** a plain `<a href>` cannot carry the
-`Authorization` header, so the file is pulled into a Blob and a temporary
-object-URL link is clicked instead.
+The remaining-life panel shows minutes of cutting left, a bar that fills as life
+is used up, what is limiting it, the projection in clock time with the measured
+wear rate, and the model's cross-check with its uncertainty.
+
+The action card appears only when there is something to do, showing the rule that
+tripped, the measured value against the limit, and the action.
+
+The trend chart is drawn on a canvas. Power, ΔT and remaining life are normalised
+into one plot area because their units are nothing like each other, so it is a
+comparison of shapes while the tiles carry the exact values. Underneath it a
+strip colours one bar per reading, which makes the Normal to Warning to Fault
+progression readable at a glance.
+
+Below that are the alert history, the report download buttons, and simulator
+controls including buttons to force a cooling fault, a power overload or a worn
+tool.
+
+Two implementation notes. Polling is used rather than WebSockets: the simulator
+produces a reading every 1.5 seconds, so a socket would save almost nothing while
+adding reconnect logic and heartbeats to debug, and if a poll fails the next one
+just works. Downloads go through `fetch()` rather than a plain link, because a
+link cannot carry the `Authorization` header, so the file is pulled into a Blob
+and a temporary object URL is clicked instead.
 
 ---
 
-## Part 7 — Authentication
+## Part 7 — Login
 
-Username + password login returning a signed JWT; every dashboard endpoint
+Username and password login returning a signed JWT. Every dashboard endpoint
 requires `Authorization: Bearer <token>`.
 
-**Password storage** — never plain text. Stored as
-`pbkdf2_hmac('sha256', password, salt, 200_000)`:
+Passwords are stored as `pbkdf2_hmac('sha256', password, salt, 200_000)`, never
+in plain text. The salt means two users with the same password get different
+hashes, so they cannot all be cracked at once from one rainbow table. The 200,000
+iterations make each guess deliberately slow; plain SHA-256 can be guessed
+billions of times a second on a GPU and this brings that down to thousands.
+`hmac.compare_digest` compares in constant time so the hash cannot be worked out
+byte by byte from response timing.
 
-- The **salt** means two users with the same password get different hashes, so
-  they cannot all be cracked at once with one rainbow table.
-- **200,000 iterations** make each guess deliberately slow. Plain SHA-256 can be
-  guessed billions of times per second on a GPU; this brings that to thousands.
-- `hmac.compare_digest` compares in constant time, so an attacker cannot learn
-  the hash byte-by-byte from response timing.
+A JWT is three base64 parts: header, payload, signature. The payload holds the
+username and an expiry, and the signature is HMAC-SHA256 over the first two parts
+using the secret key. Anyone can read a JWT, so nothing secret goes in it, but
+nobody can forge one without the key. There is a test that forges a token with
+the wrong key and checks it is rejected.
 
-**The token** — a JWT is `header.payload.signature`. The payload holds the
-username and an expiry; the signature is HMAC-SHA256 over the first two parts
-using the secret key. Anyone can *read* a JWT, so no secrets go in it — but
-nobody can *forge* one without the key. A test forges a token with the wrong key
-and asserts it is rejected.
-
-**Two deliberate details:**
-
-- Login failures return the same vague message whether the username or the
-  password was wrong, and an unknown username still runs a dummy hash so the
-  response time does not leak which usernames exist.
-- If `MHM_SECRET_KEY` is not set, a random key is generated per process. Tokens
-  then stop working on restart — inconvenient, but far safer than shipping a
-  hardcoded signing key that anyone reading this repo could forge tokens with.
+Two deliberate details. Login failures give the same vague message whether the
+username or the password was wrong, and an unknown username still runs a dummy
+hash so the response time does not reveal which usernames exist. And if
+`MHM_SECRET_KEY` is not set, a random key is generated per process, so tokens
+stop working after a restart. That is mildly annoying but much safer than
+shipping a signing key that anyone reading the repo could forge tokens with.
 
 ---
 
-## Part 8 — Testing
+## Part 8 — Tests
 
 ```bash
 python -m pytest tests/ -v
 ```
 
-**82 tests, all passing.** Tests write to a temp database, never the real audit
+82 tests, all passing. They write to a temporary database, never the real audit
 trail.
 
-| File | What it pins down |
+| File | What it covers |
 |---|---|
-| `test_alerts.py` | Each threshold rule independently; the AND in the cooling rule; the two-sided power envelope; the per-tier overstrain limit; **that rules escalate the model and the model can never suppress a rule**; that every alert carries an action. Loads no model — pure logic. |
-| `test_api.py` | Auth protects every endpoint; forged tokens rejected; prediction shape and probability sum; implausible readings rejected with 422; predictions and alerts reach both audit sinks; simulator tick/buffer/injection; CSV has a header row; PDF starts with `%PDF-`. |
-| `test_thresholds.py` | The offline pandas labeller and the live scalar alerter flag identical rows across all 10,000 — the drift guard. |
-| `test_rul.py` | RUL is not `200 - wear`; high torque lowers the ceiling; the per-tier ceiling ordering; the wear-rate fit survives a tool change and refuses to guess when wear is flat; time-compression normalisation; the RUL rule does **not** double-alert with the tool-wear threshold but *does* fire for the overstrain-bound gap; the vectorised training target matches the scalar physics row for row. |
-| `test_units.py` | Conversions round-trip, and a temperature *difference* has no offset applied. |
+| `test_alerts.py` | each threshold rule on its own, the AND in the cooling rule, the two-sided power envelope, the per-tier overstrain limit, that rules escalate the model and the model cannot suppress a rule, and that every alert carries an action. Loads no model, so it is pure logic. |
+| `test_rul.py` | that RUL is not `200 - wear` and high torque lowers the ceiling, the per-tier ceiling ordering, that the wear-rate fit survives a tool change and refuses to guess when wear is flat, the time-compression normalisation, that the RUL rule does not double up with the tool-wear threshold but does fire for the overstrain gap, and that the vectorised training target matches the scalar physics row for row. |
+| `test_units.py` | conversions round-trip, and a temperature difference has no offset applied. |
+| `test_api.py` | login protects every endpoint, forged tokens are rejected, prediction shape and probabilities, implausible readings rejected with 422, predictions and alerts reaching both audit sinks, simulator tick and buffer and injection, CSV columns carrying their units and the values actually being converted, and the PDF starting with `%PDF-`. |
+| `test_thresholds.py` | the offline pandas labeller and the live scalar alerter flag identical rows across all 10,000. |
 
 ---
 
 ## API reference
 
-Interactive docs at **http://127.0.0.1:8010/docs**.
+Interactive docs at http://127.0.0.1:8010/docs.
 
-| Method | Path | Auth | Purpose |
+| Method | Path | Login | Purpose |
 |---|---|---|---|
-| `GET` | `/api/health` | — | liveness, model + simulator state |
-| `POST` | `/api/auth/login` | — | username/password → JWT |
-| `GET` | `/api/auth/me` | ✓ | current user |
-| `GET` | `/api/model/info` | ✓ | loaded model metadata |
-| `POST` | `/api/predict` | ✓ | sensor reading → status + confidence + alert + RUL |
-| `GET` | `/api/live` | ✓ | recent simulated readings |
-| `GET` | `/api/alerts` | ✓ | alert history |
-| `GET` | `/api/predictions` | ✓ | prediction history |
-| `POST` | `/api/simulator/start` / `stop` | ✓ | control the simulator |
-| `POST` | `/api/simulator/inject/{scenario}` | ✓ | `overheat` / `overload` / `tool_wear` / `reset` |
-| `GET` | `/api/report/csv` / `pdf` | ✓ | download a report |
+| `GET` | `/api/health` | — | liveness, model and simulator state |
+| `POST` | `/api/auth/login` | — | username and password to JWT |
+| `GET` | `/api/auth/me` | yes | current user |
+| `GET` | `/api/model/info` | yes | loaded model metadata |
+| `POST` | `/api/predict` | yes | reading to status, confidence, alert, RUL |
+| `GET` | `/api/live` | yes | recent simulated readings |
+| `GET` | `/api/alerts` | yes | alert history |
+| `GET` | `/api/predictions` | yes | prediction history |
+| `POST` | `/api/simulator/start` and `/stop` | yes | control the simulator |
+| `POST` | `/api/simulator/inject/{scenario}` | yes | `overheat`, `overload`, `tool_wear`, `reset` |
+| `GET` | `/api/report/csv` and `/pdf` | yes | download a report |
 
-Example:
+Example, remembering that temperatures go over the API in kelvin:
 
 ```bash
 curl -X POST http://127.0.0.1:8010/api/predict -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"air_temp":300.0,"process_temp":311.0,"rot_speed":1400,"torque":72.0,"tool_wear":190,"product_type":"M"}'
 ```
 
-Returns `status: "Fault"`, `power: 10556 W` (shown as `10.56 kW`), severity
-`Critical`, and:
+That returns `status: "Fault"` at 10.56 kW, severity `Critical`, and:
 
 > Reduce load immediately — cut feed rate or depth of cut. Check for a blunt tool
 > or incorrect material.
 
-...plus every rule that tripped, including the secondary overstrain fault, and a
-`remaining_life` block:
+along with every rule that tripped, including the secondary overstrain fault, and
+a `remaining_life` block:
 
 ```json
 {
@@ -707,16 +711,16 @@ Returns `status: "Fault"`, `power: 10556 W` (shown as `10.56 kW`), severity
 
 ### Configuration
 
-All settings are env-overridable (see `backend/config.py`):
-`MHM_SECRET_KEY`, `MHM_DEMO_USER`, `MHM_DEMO_PASSWORD`, `MHM_SIM_INTERVAL`,
-`MHM_SIM_AUTOSTART`, `MHM_TOKEN_TTL_MIN`, `MHM_DB_PATH`, `MHM_MODEL_PATH`,
-`MHM_RUL_MODEL_PATH`.
+Everything is overridable by environment variable, listed in
+`backend/config.py`: `MHM_SECRET_KEY`, `MHM_DEMO_USER`, `MHM_DEMO_PASSWORD`,
+`MHM_SIM_INTERVAL`, `MHM_SIM_AUTOSTART`, `MHM_TOKEN_TTL_MIN`, `MHM_DB_PATH`,
+`MHM_MODEL_PATH`, `MHM_RUL_MODEL_PATH`.
 
 ---
 
 ## Results
 
-Held-out test set, 2,000 rows never seen during training:
+Held-out test set, 2,000 rows the model never saw during training:
 
 ```
               precision    recall  f1-score   support
@@ -729,10 +733,10 @@ Held-out test set, 2,000 rows never seen during training:
    macro avg      0.992     0.944     0.966      2000
 ```
 
-5-fold cross-validation on the training half: macro-F1 **0.9457 ± 0.0113** —
-confirming the score is not a fluke of one particular split.
+Five-fold cross-validation on the training half gives a macro F1 of 0.9457 ±
+0.0113, which says the score is not a fluke of one particular split.
 
-Confusion matrix (rows = actual, columns = predicted):
+Confusion matrix, rows actual and columns predicted:
 
 |            | Normal | Warning | Fault |
 |------------|--------|---------|-------|
@@ -740,124 +744,133 @@ Confusion matrix (rows = actual, columns = predicted):
 | **Warning** | 2 | 591 | 0 |
 | **Fault**   | 1 | 10 | 57 |
 
-### Reading this operationally
+### What that means in practice
 
-The two error types are **not** equally bad:
+The two kinds of error are not equally bad.
 
-- **1 missed fault** (Fault → Normal) out of 68. This is the dangerous cell: a
-  real failure reported as healthy costs a breakdown.
-- **10 faults downgraded to Warning.** Less serious than it looks — the operator
-  is still alerted and still told to inspect the machine; the alert is just amber
-  instead of red.
-- **0 false alarms** (Normal → Fault). A false alarm only costs an unnecessary
-  inspection.
+One real fault out of 68 was reported as Normal. That is the dangerous cell,
+since a missed failure costs a breakdown.
 
-So of 68 real faults, **67 produced an alert** and exactly one was silent.
+Ten faults were downgraded to Warning. Less serious than it looks, because the
+operator is still alerted and still told to inspect the machine; the alert is
+amber rather than red.
 
-Feature importance: `tool_wear` 0.192, `rot_speed` 0.190, `temp_diff` 0.168,
-`power` 0.132, `torque` 0.132, `strain` 0.110 — the derived features
-(`temp_diff`, `power`, `strain`) account for **41%** of all decisions, which is
-the quantitative justification for engineering them.
+No Normal rows were reported as Fault. A false alarm only costs an unnecessary
+inspection.
 
-Generated figures in `outputs/figures/`:
+So of 68 real faults, 67 produced an alert and one was silent.
+
+Feature importance comes out as `tool_wear` 0.192, `rot_speed` 0.190,
+`temp_diff` 0.168, `power` 0.132, `torque` 0.132, `strain` 0.110, `air_temp`
+0.046, `process_temp` 0.024, `type_code` 0.005. The three derived features
+account for 41% of all decisions, which is the argument for engineering them in
+the first place.
+
+Figures land in `outputs/figures/`:
 
 | File | Shows |
 |---|---|
-| `confusion_matrix.png` | counts + row-normalised percentages |
-| `actual_vs_predicted.png` | actual vs predicted as a step trace, mismatches marked |
+| `confusion_matrix.png` | counts and row percentages |
+| `actual_vs_predicted.png` | actual against predicted as a step trace, mismatches marked |
 | `feature_importance.png` | which channels drive decisions |
-| `confidence_distribution.png` | confidence when right vs wrong — is the score meaningful? |
+| `confidence_distribution.png` | confidence when right against when wrong |
 | `rul_predicted_vs_actual.png` | RUL regressor against the physics target |
-| `rul_error_distribution.png` | RUL error; negative = predicted too little life (safe) |
+| `rul_error_distribution.png` | RUL error, negative meaning it predicted too little life |
 | `rul_uncertainty.png` | RUL with the ±1.96σ tree-spread band |
 
 ---
 
-## Questions you should be ready to answer
+## Likely questions
 
-**"Your accuracy is 99% — isn't that suspiciously high?"**
-Partly, yes, and I report why. The Warning class is derived from the sensors, so
+**Your accuracy is 99%, isn't that suspiciously high?**
+Partly, and the README says why. The Warning class is derived from the sensors so
 the model learns that boundary almost perfectly. The honest number is Fault
-recall: 0.838. I also report a Logistic Regression baseline at 0.363 Fault F1 to
+recall at 0.838. The Logistic Regression baseline at 0.363 Fault F1 is there to
 show the task is not trivially easy.
 
-**"Why not just use the threshold rules? Why do you need ML at all?"**
-Two reasons. The rules cannot detect combinations they were not written for —
-the system does raise "Model-detected" alerts where no single limit is crossed.
-And the Fault class contains a stochastic tool-breaking point that no fixed
-threshold captures. But I do not *replace* the rules with the model — the rules
-still run, and they can override the model upward.
+**Why use ML at all when you already have threshold rules?**
+Two reasons. The rules cannot catch combinations nobody wrote a rule for, and the
+system does raise model-only alerts where no single limit has been crossed. And
+the Fault class contains a tool that breaks at an unpredictable point, which no
+fixed threshold captures. The model does not replace the rules though. They still
+run, and they can override it upwards.
 
-**"What happens if the model is wrong?"**
-If it is wrongly optimistic, the threshold rules still fire — the model cannot
-suppress a hard limit. If it is wrongly pessimistic, you get a false alarm, which
-costs an inspection. The asymmetry is deliberate.
+**What happens if the model is wrong?**
+If it is wrongly optimistic the threshold rules still fire, because the model
+cannot suppress a hard limit. If it is wrongly pessimistic you get a false alarm
+and an unnecessary inspection. The asymmetry is on purpose.
 
-**"Why median imputation instead of mean?"**
-The median is robust to outliers. The mean is dragged by exactly the extreme
-readings we are trying to detect, so using it would partly erase the signal.
+**Why median imputation instead of mean?**
+The median is not moved much by outliers. The mean gets dragged by exactly the
+extreme readings we are trying to detect, so using it would partly erase the
+signal.
 
-**"Why is heat dissipation an AND and not an OR?"**
-Cooling depends on forced convection. A small ΔT with a fast spindle is fine —
-there is enough airflow. It is only a failure when the spindle is *also* slow.
+**Why is heat dissipation an AND rather than an OR?**
+Cooling depends on airflow over the spindle. A small ΔT with a fast spindle is
+fine because there is enough air moving. It only becomes a failure when the
+spindle is slow as well.
 
-**"Your RUL model has R² of 0.999 — isn't that just the physics formula?"**
-Yes, and I say so up front. The target is deterministic, so the forest learns a
-division. I keep it as a cross-check and the API returns the physics value as
-authoritative. What the exercise actually produced is the second model: strip out
-`tool_wear` and the error goes from 0.4 to 50 minutes, which tells me the
-tool-wear counter has no redundancy and is a single point of failure.
+**Your RUL model scores R² 0.999, isn't that just the formula?**
+Yes, and that is stated up front. The target is deterministic so the forest
+learns a division. It is kept as a cross-check and the API returns the physics
+value. What the exercise actually produced is the second model: remove
+`tool_wear` and the error goes from 0.4 to 50 minutes, which says the tool-wear
+counter is a single point of failure with no redundancy.
 
-**"Why didn't you use an LSTM for RUL?"**
-Because AI4I 2020 has no run-to-failure trajectories — no unit id, no time
-ordering. A sequence model needs to see degradation unfold. I would have had to
-fabricate the cycle structure, and the resulting metric would measure nothing.
-Model-based prognostics is the correct family when you have known failure physics
-and no run-to-failure data.
+**Why not an LSTM for RUL?**
+Because AI4I 2020 has no run-to-failure trajectories, no unit ID and no time
+ordering. A sequence model needs to watch degradation unfold. The cycle structure
+would have to be fabricated and the resulting score would measure nothing.
 
-**"Why is the temperature difference in °C when you store kelvin?"**
-Because a *difference* of 10 K is exactly 10 °C — the offset cancels. Only
+**Why does the dashboard show °C when the code constant is called `_K`?**
+A temperature difference of 8.6 K is 8.6 °C, because the offset cancels. Only
 absolute temperatures need the 273.15 shift. That distinction has its own
-function and its own test, because getting it wrong would turn a healthy ΔT of 10
+function and its own test, since getting it wrong would turn a healthy ΔT of 10
 into -263 and trip a permanent cooling fault.
 
 ---
 
-## Limitations (be honest about these)
+## Limitations
 
-- **The dataset is synthetic**, albeit physically grounded. Real machine data is
-  noisier and has sensor drift, calibration offsets and missing periods.
-- **No vibration or pressure channels** — the dataset does not have them.
-- **The classifier is not time-aware.** It classifies each reading
-  independently. Only the RUL wear-rate estimator looks at history, and it fits a
-  simple linear slope. A production system would model the degradation
-  trajectory, not just its current gradient.
-- **RUL covers tool life only.** Bearings, spindle and drivetrain have their own
-  wear mechanisms that this dataset does not instrument, so "remaining useful
-  life" here means "remaining tool life" and the README says so rather than
-  implying whole-machine prognostics.
-- **Auth is deliberately basic** — one in-memory user, no registration, no
-  password reset, no refresh tokens, no login rate limiting, no HTTPS. It meets
-  "only logged-in users can view the dashboard" and nothing more.
-- **SQLite with a single writer lock** is fine for one machine at 1.5 s intervals
-  and would not be for a factory-scale fleet.
-- **The demo password is in the source** and is intended for local use only. Set
-  `MHM_SECRET_KEY` and `MHM_DEMO_PASSWORD` before exposing this anywhere.
+The dataset is synthetic, though grounded in real physics. Real machine data is
+noisier and has sensor drift, calibration offsets and missing periods.
+
+There are no vibration or pressure channels, because the dataset does not have
+them.
+
+The classifier is not time-aware. It looks at each reading on its own. Only the
+RUL wear-rate estimator uses history, and it fits a straight line. A production
+system would model the degradation trajectory rather than just its current
+gradient.
+
+RUL covers tool life only. Bearings, spindle and drivetrain have their own wear
+mechanisms that this dataset does not instrument, so "remaining useful life" here
+means remaining tool life.
+
+Login is deliberately basic: one in-memory user, no registration, no password
+reset, no refresh tokens, no rate limiting and no HTTPS. It meets "only logged-in
+users can see the dashboard" and nothing beyond that.
+
+SQLite with a single writer lock is fine for one machine at 1.5 second intervals
+and would not be for a factory of them.
+
+The demo password is in the source and is meant for local use. Set
+`MHM_SECRET_KEY` and `MHM_DEMO_PASSWORD` before putting this anywhere else.
 
 ---
 
 ## Troubleshooting
 
 **`No trained model at model/health_model.pkl`** — run the pipeline steps in
-order; `train_model.py` needs `clean_data.py` to have run first.
+order, since `train_model.py` needs `clean_data.py` to have run first.
 
-**Dashboard shows "disconnected"** — the token expires after 8 hours; sign out
-and back in. If `MHM_SECRET_KEY` is unset, restarting the server also invalidates
-tokens (this is intentional, and the server prints a warning at startup).
+**Dashboard says "disconnected"** — the token lasts 8 hours, so log out and back
+in. If `MHM_SECRET_KEY` is unset, restarting the server also invalidates tokens.
+That is intentional and the server prints a warning at startup.
 
-**CSS or JS changes do not appear** — bump `?v=` in `frontend/index.html`. The
-static routes send `Cache-Control: no-cache`, but a copy cached before that
-header was added can persist.
+**CSS or JS changes do not show up** — bump the `?v=` number in
+`frontend/index.html`. The static routes send `Cache-Control: no-cache`, but a
+copy cached before that header existed can hang around.
 
 **Simulator not producing readings** — check `GET /api/health` for
 `last_simulator_error`, or set `MHM_SIM_AUTOSTART=1`.
