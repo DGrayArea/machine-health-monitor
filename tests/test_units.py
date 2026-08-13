@@ -1,11 +1,11 @@
 """
 Unit-conversion tests.
 
-Small, but worth having: a unit error is silent. Nothing crashes, no exception
-is raised, the dashboard just shows a confidently wrong number. The one that
-matters most is `delta_kelvin_to_celsius` — subtracting 273.15 from a
-temperature *difference* is the single easiest mistake to make here, and it
-would turn a healthy ΔT of 10 into -263 and trip a permanent cooling fault.
+Small, but worth having, because a unit error is silent. Nothing crashes and no
+exception is raised, the dashboard just shows a confidently wrong number. The
+one that matters most is delta_kelvin_to_celsius: subtracting 273.15 from a
+temperature difference is the easiest mistake to make here, and it would turn a
+healthy ΔT of 10 into -263 and trip a permanent cooling fault.
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ def test_conversion_round_trips():
 
 
 def test_temperature_difference_has_no_offset():
-    """A DIFFERENCE of 10 K is 10 °C. Subtracting 273.15 here would be a bug."""
+    """A difference of 10 K is 10 °C. Subtracting 273.15 here would be a bug."""
     assert units.delta_kelvin_to_celsius(10.0) == pytest.approx(10.0)
     assert units.delta_kelvin_to_celsius(8.6) == pytest.approx(8.6)
 
@@ -41,8 +41,8 @@ def test_power_conversion():
 
 def test_dataset_nominal_point_is_a_sane_shop_floor_temperature():
     """
-    Sanity check against reality: the AI4I nominal air temperature of 298.1 K
-    should land around 25 °C. If a conversion ever inverts, this catches it.
+    A sanity check against reality. The AI4I nominal air temperature of 298.1 K
+    should land around 25 °C, so this catches a conversion being inverted.
     """
     celsius = units.kelvin_to_celsius(298.1)
     assert 20.0 < celsius < 30.0

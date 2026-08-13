@@ -1,66 +1,60 @@
 """
-Remaining Useful Life (RUL) — how much cutting time is left before the tool
-must be changed.
+Remaining useful life: how much cutting time the tool has left.
 
-READ THIS BEFORE YOU DEFEND THE PROJECT
-    Classical data-driven prognostics (the NASA C-MAPSS style) needs
-    **run-to-failure trajectories**: many units, each logged from new until it
-    dies, so the model can learn what degradation looks like over time.
+Why this is physics and not a sequence model
+    The usual data-driven approach to RUL, the NASA C-MAPSS style, needs
+    run-to-failure trajectories. Many units, each logged from new until it dies,
+    so the model can learn the shape of degradation over time.
 
-    The AI4I 2020 dataset does NOT have that. Its 10,000 rows are independent
-    samples with no unit id and no time ordering — you cannot follow one tool
-    from new to worn. Pretending otherwise, by inventing a "cycle" column and
-    training an LSTM on it, would produce an impressive-looking number that
-    means nothing.
+    AI4I 2020 does not have that. Its 10,000 rows are independent samples with
+    no unit id and no time ordering, so you cannot follow one tool from new to
+    worn. Inventing a "cycle" column and training an LSTM on it would give a
+    good-looking number that measures nothing.
 
-    So this module does prognostics the other legitimate way: **model-based**
-    (physics-of-failure) rather than data-driven. Both are standard families in
-    the prognostics literature; model-based is the correct choice when you have
-    a known failure physics and no run-to-failure data. That is exactly our
-    situation, and it is a stronger answer than a fake LSTM.
+    So this uses the other standard approach, model-based prognostics, working
+    from the failure physics. That is the right family when the physics is known
+    and run-to-failure data is not available.
 
-THE THREE LAYERS
-    1. PHYSICS RUL  (this file, `physics_rul`)
-       Exact remaining tool-wear minutes until the first binding limit. No model
-       needed, always available, fully interpretable.
+The three layers
+    1. Physics (physics_rul, below)
+       Remaining cutting minutes until the first binding limit. No model needed,
+       always available, easy to explain.
 
-    2. LEARNED RUL  (model/rul_model.pkl, trained by scripts/train_rul_model.py)
-       A Random Forest regressor that predicts layer 1 from the sensors. We
-       measured it and it does NOT beat the formula — it reproduces it to within
-       0.4 min and its trees barely disagree, because there is no noise in the
-       target for them to disagree about. It is kept as a cross-check only, and
-       the physics value is what the API returns as authoritative. The one place
-       its spread is informative is the boundary where the binding constraint
-       switches. See scripts/train_rul_model.py for the numbers.
+    2. Learned model (model/rul_model.pkl, from scripts/train_rul_model.py)
+       A Random Forest that predicts layer 1 from the sensors. It was measured
+       and it does not beat the formula: it reproduces it to within 0.4 min and
+       its trees barely disagree, since there is no noise in the target for them
+       to disagree about. It is kept as a cross-check and the API returns the
+       physics value. Its spread is only informative at the boundary where the
+       binding constraint switches. The numbers are in train_rul_model.py.
 
-    3. WALL-CLOCK PROJECTION  (`estimate_wear_rate` + `project_wallclock`)
-       Layers 1 and 2 answer "how many minutes of *cutting* are left". An
-       operator wants "how long until I have to stop the line". So we measure
-       the ACTUAL observed wear rate from the recent live readings and divide.
-       This uses measured data, not an invented coefficient.
+    3. Clock time (estimate_wear_rate and project_wallclock)
+       Layers 1 and 2 give minutes of cutting. An operator wants to know how
+       long until they have to stop, so we measure the wear rate actually seen
+       in the recent readings and divide by it.
 
-WHAT LIMITS TOOL LIFE (layer 1 in detail)
-    Two constraints, and the binding one changes with load:
+What limits tool life
+    Two constraints, and which one bites depends on the load.
 
-      a) Tool wear:  the tool is spent at TWF_WEAR_MIN_MIN (200 min).
-             remaining = 200 - tool_wear
+      Tool wear:  the tool is spent at TWF_WEAR_MIN_MIN (200 min).
+          remaining = 200 - tool_wear
 
-      b) Overstrain: failure when strain = tool_wear * torque exceeds the
-         tier limit. Rearranged for the wear at which that happens:
-             max_wear_at_this_torque = osf_limit / torque
-             remaining = (osf_limit / torque) - tool_wear
+      Overstrain: fails when strain = tool_wear * torque passes the tier limit.
+      Rearranged for the wear at which that happens:
+          max_wear_at_this_torque = osf_limit / torque
+          remaining = (osf_limit / torque) - tool_wear
 
     RUL is the smaller of the two, floored at zero.
 
-    This is why RUL is NOT just "200 - tool_wear". Run an M-tier tool at 50 Nm
-    and the strain limit allows 12000/50 = 240 min, so wear binds at 200. Run it
-    at 75 Nm and the strain limit allows only 12000/75 = 160 min — the tool now
-    dies 40 minutes early, and no tool-wear threshold would ever have told you.
-    **Cutting harder does not just use the tool faster, it lowers the ceiling.**
+    This is why RUL is not simply "200 - tool_wear". An M-tier tool at 50 N·m
+    has a strain ceiling of 12000/50 = 240 min, so wear binds first at 200. Run
+    the same tool at 75 N·m and the ceiling drops to 12000/75 = 160 min, so it
+    dies 40 minutes early. Cutting harder does not only use the tool up faster,
+    it lowers the ceiling, and no wear threshold would tell you that.
 
-    Deliberately NOT included: cooling faults and power overloads. Those are
-    instantaneous failure conditions, not wear mechanisms — they do not consume
-    tool life, they end it immediately. The alert rules already cover them.
+    Cooling faults and power overloads are left out on purpose. They are instant
+    failure conditions rather than wear mechanisms, so they do not eat tool life,
+    they end it. The alert rules in thresholds.py already handle them.
 """
 
 from __future__ import annotations
@@ -77,36 +71,35 @@ RUL_WARNING_MIN = 25.0
 # Below this, the tool should not start another cycle.
 RUL_CRITICAL_MIN = 5.0
 
-# Minimum number of live readings before a wear-rate trend is trustworthy.
+# Minimum number of live readings before a wear-rate trend means anything.
 MIN_POINTS_FOR_RATE = 4
 
 # How many recent readings the wear-rate fit uses.
 #
-# This is a responsiveness/noise trade-off. Fit over the whole buffer and the
-# rate is smooth but lags badly — a machine that started cutting hard a minute
-# ago still reports a nominal rate, which is exactly when you want the warning.
-# Fit over 2 points and it is responsive but jumps around with sensor noise.
-# ~20 readings is long enough to average out the jitter and short enough to
-# react within about half a minute at the default tick rate.
+# A trade-off between responsiveness and noise. Fit the whole buffer and the
+# rate lags badly, so a machine that started cutting hard a minute ago still
+# reports a normal rate, which is exactly when the warning is wanted. Fit two
+# points and it jumps around with sensor noise. Twenty readings averages out the
+# jitter and still reacts within about half a minute at the default tick rate.
 WEAR_RATE_WINDOW = 20
 
 
 @dataclass(frozen=True)
 class RulEstimate:
-    """Everything we know about how much life is left."""
+    """What we know about how much life is left."""
 
     remaining_min: float          # cutting minutes to the first binding limit
-    binding_constraint: str       # "tool_wear" | "overstrain"
-    total_usable_min: float       # usable tool life at THIS operating point
-    fraction_consumed: float      # 0..1, for a progress bar
+    binding_constraint: str       # "tool_wear" or "overstrain"
+    total_usable_min: float       # usable tool life at this operating point
+    fraction_consumed: float      # 0 to 1, for a progress bar
     wear_limited_min: float       # remaining under the tool-wear limit alone
     strain_limited_min: float     # remaining under the overstrain limit alone
 
     def to_dict(self) -> dict[str, Any]:
-        # An idle spindle (torque ~ 0) makes the overstrain limit unreachable,
-        # which is mathematically +inf. JSON has no infinity literal — Python
-        # would emit a bare `Infinity`, which is invalid JSON and blows up in
-        # the browser — so unreachable limits are serialised as null.
+        # An idle spindle (torque near zero) can never reach the overstrain
+        # limit, which is mathematically +inf. JSON has no infinity literal, and
+        # Python would emit a bare `Infinity` that the browser rejects, so
+        # unreachable limits are sent as null.
         def finite(value: float) -> float | None:
             return round(value, 1) if math.isfinite(value) else None
 
@@ -122,7 +115,7 @@ class RulEstimate:
 
 def physics_rul(features: dict[str, float], product_type: str = "M") -> RulEstimate:
     """
-    Exact remaining tool life in cutting minutes, from the failure physics.
+    Remaining tool life in cutting minutes, from the failure physics.
 
     >>> physics_rul({"tool_wear": 100.0, "torque": 50.0}, "M").remaining_min
     100.0
@@ -131,12 +124,11 @@ def physics_rul(features: dict[str, float], product_type: str = "M") -> RulEstim
     torque = float(features["torque"])
     osf_limit = OSF_STRAIN_LIMIT.get(product_type, OSF_STRAIN_LIMIT["L"])
 
-    # (a) tool-wear constraint
+    # Tool-wear constraint.
     wear_limited = TWF_WEAR_MIN_MIN - tool_wear
 
-    # (b) overstrain constraint. At zero torque nothing is being cut, so the
-    # strain limit is never reached — treat it as unbounded rather than dividing
-    # by zero.
+    # Overstrain constraint. At zero torque nothing is being cut, so the strain
+    # limit is unreachable. Treat that as unbounded rather than dividing by zero.
     if torque > 1e-6:
         max_wear_at_torque = osf_limit / torque
         strain_limited = max_wear_at_torque - tool_wear
@@ -167,7 +159,7 @@ def physics_rul(features: dict[str, float], product_type: str = "M") -> RulEstim
 
 
 # --------------------------------------------------------------------------
-# Layer 3 — turn "cutting minutes" into "wall-clock minutes"
+# Layer 3: turning cutting minutes into clock time
 # --------------------------------------------------------------------------
 
 def estimate_wear_rate(
@@ -175,17 +167,16 @@ def estimate_wear_rate(
     window: int = WEAR_RATE_WINDOW,
 ) -> float | None:
     """
-    Measure the ACTUAL wear rate from recent readings, in tool-wear minutes per
+    Measure the wear rate from recent readings, in tool-wear minutes per
     wall-clock minute.
 
-    Two things make this non-trivial:
+    Two things make it more than a subtraction. A tool change resets wear to
+    zero, and fitting across that reset gives a negative slope, so only the
+    readings since the most recent reset are used. And a single pair of points
+    is noisy, so we fit a least-squares line over the whole current segment
+    rather than differencing the endpoints.
 
-      * A tool change resets wear to zero. Fitting across a reset would give a
-        negative slope, so we use only the readings since the most recent reset.
-      * A single pair of points is noisy, so we fit a least-squares line over the
-        whole current segment instead of differencing the endpoints.
-
-    Returns None when there is not enough clean data to be honest about a rate.
+    Returns None when there is not enough clean data to state a rate.
     """
     points: list[tuple[float, float]] = []
     for record in history:
@@ -200,7 +191,7 @@ def estimate_wear_rate(
         return None
 
     # Only the most recent window, so the rate reflects how the machine is being
-    # run NOW rather than averaging in conditions from minutes ago.
+    # run now rather than averaging in conditions from minutes ago.
     points = points[-window:]
 
     # Keep only the segment after the last tool change.
@@ -234,16 +225,17 @@ def normalise_wear_rate(
     """
     Express the observed wear rate as a multiple of the nominal duty.
 
-    On a real machine, tool wear is counted in minutes of cutting, so at nominal
+    On a real machine tool wear is counted in minutes of cutting, so at nominal
     load one wear-minute passes per wall-clock minute and the rate is 1.0. Under
-    heavy load it exceeds 1.0 — the tool is burning life faster than the clock.
+    heavy load it goes above 1.0, meaning the tool is losing life faster than the
+    clock.
 
-    The simulator, however, runs COMPRESSED: a 1.5 s tick advances the tool by
-    ~2.2 cutting minutes so a full tool life takes about two minutes to watch
-    instead of three hours. Its raw rate is therefore ~88, which is arithmetically
-    correct and completely useless on a dashboard. Dividing by the nominal rate
-    cancels the compression and leaves the number an engineer actually wants:
-    "we are wearing this tool 1.6x faster than normal".
+    The simulator runs compressed: a 1.5 s tick advances the tool about 2.2
+    cutting minutes, so a full tool life is watchable in a couple of minutes
+    instead of three hours. Its raw rate is therefore around 88, which is
+    arithmetically right and useless on a dashboard. Dividing by the nominal rate
+    cancels the compression and leaves something readable, such as "wearing this
+    tool 1.6x faster than normal".
     """
     if observed_rate is None or observed_rate <= 1e-6:
         return None
@@ -261,8 +253,8 @@ def project_wallclock(
     Convert remaining cutting minutes into elapsed machine minutes at the
     observed wear rate.
 
-    None when the rate is unknown — better to show nothing than to show a
-    confident deadline we cannot support.
+    Returns None when the rate is unknown. Better to show nothing than a
+    deadline we cannot back up.
     """
     normalised = normalise_wear_rate(wear_rate, nominal_rate)
     if normalised is None or normalised <= 1e-6:
@@ -285,17 +277,16 @@ def rul_band(remaining_min: float) -> str:
 
 def rul_rule(features: dict[str, float], product_type: str = "M") -> RuleHit | None:
     """
-    Raise an alert when little life is left — but ONLY when the overstrain
-    constraint is the binding one.
+    Raise an alert when little life is left, but only when overstrain is the
+    binding constraint.
 
-    Why the restriction: when tool wear is the binding constraint, the existing
-    `tool_wear` threshold rule already fires at 180 min and says the same thing.
-    Emitting both would double-alert on one condition, and an operator who is
-    shown two rows for one problem stops trusting the list.
+    The restriction avoids double-alerting. When tool wear binds, the existing
+    tool_wear threshold already fires at 180 min and says the same thing, and an
+    operator shown two rows for one problem stops reading the list.
 
-    The overstrain-bound case is the one nothing else catches: a tool at only
-    150 min of wear looks perfectly healthy to a wear threshold, but at 75 Nm its
-    ceiling is 160 min and it has 10 minutes left.
+    The overstrain case is the one nothing else catches. A tool at 150 min of
+    wear looks fine to a wear threshold, but at 75 N·m its ceiling is 160 min and
+    it has ten minutes left.
     """
     estimate = physics_rul(features, product_type)
     if estimate.binding_constraint != "overstrain":

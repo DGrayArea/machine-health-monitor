@@ -1,18 +1,18 @@
 """
-Loads the trained model once and runs inference.
+Loads the trained models once and runs inference.
 
-WHY A SINGLETON
-    joblib.load() reads a ~10 MB forest off disk and rebuilds 300 trees. Doing
-    that per request would make the API roughly 100x slower for no benefit. We
-    load it once at startup and reuse the in-memory object; scikit-learn
-    predictors are stateless at inference time, so this is thread-safe.
+Loaded once, not per request
+    joblib.load() reads about 10 MB off disk and rebuilds 300 trees. Doing that
+    on every request would make the API roughly 100x slower for nothing. The
+    bundle is loaded at startup and reused. scikit-learn predictors hold no
+    state at inference time, so sharing one across threads is fine.
 
-WHY WE RE-ORDER COLUMNS FROM THE BUNDLE
-    The .pkl stores the feature order used during training. We rebuild the input
-    row against THAT list rather than hardcoding it here. If someone retrains
-    with a different feature set, this file keeps working — instead of silently
-    feeding `torque` into the column the model thinks is `power`, which would
-    produce confident, completely wrong predictions with no error message.
+Column order comes from the bundle
+    The .pkl stores the feature order used during training, and each input row
+    is rebuilt against that list rather than a hardcoded one here. Retrain with a
+    different feature set and this file still works, instead of quietly feeding
+    `torque` into the column the model thinks is `power` and returning a
+    confident wrong answer with no error.
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ _load_lock = threading.Lock()
 
 
 class ModelNotAvailable(RuntimeError):
-    """Raised when the .pkl is missing — the API surfaces this as HTTP 503."""
+    """Raised when the .pkl is missing. The API turns this into an HTTP 503."""
 
 
 def load_bundle(path: Path | None = None) -> dict[str, Any]:
@@ -62,11 +62,11 @@ def is_ready() -> bool:
 
 def load_rul_bundle() -> dict[str, Any] | None:
     """
-    Load the RUL regressor if it exists.
+    Load the RUL regressor if it is there.
 
-    Unlike the classifier this one is OPTIONAL: RUL is computed from the physics
-    formula in backend/rul.py, and the model is only a cross-check. A missing
-    rul_model.pkl degrades the response (no model column) but never breaks it.
+    Unlike the classifier this one is optional. RUL comes from the physics
+    formula in backend/rul.py and the model is only a cross-check, so a missing
+    rul_model.pkl drops one field from the response but breaks nothing.
     """
     global _rul_bundle
     with _load_lock:
@@ -94,12 +94,12 @@ def predict(reading: dict[str, Any]) -> dict[str, Any]:
     """
     Run one sensor reading through the model.
 
-    Returns status, confidence, the full probability vector, and the derived
-    features (which the caller needs anyway for the threshold rules).
+    Returns the status, the confidence, the full probability vector and the
+    derived features, which the caller needs anyway for the threshold rules.
 
-    Confidence = the probability of the winning class. For a Random Forest that
-    is the fraction of the 300 trees that voted for it — so 0.62 genuinely means
-    "186 trees said Fault, 114 said something else", not a made-up number.
+    Confidence is the probability of the winning class. For a Random Forest that
+    is the share of the 300 trees that voted for it, so 0.62 really does mean
+    186 trees said Fault and 114 said something else.
     """
     bundle = load_bundle()
     model, features = bundle["model"], bundle["features"]
@@ -113,13 +113,13 @@ def predict(reading: dict[str, Any]) -> dict[str, Any]:
         product_type=reading.get("product_type", "M"),
     )
 
-    # Build the row in the exact order the model was trained on.
+    # Build the row in the order the model was trained on.
     #
-    # We pass a *named* DataFrame rather than a bare numpy array on purpose:
-    # the model was fitted with column names, so scikit-learn will raise if the
-    # names or their order do not match. A plain array silently accepts any
-    # ordering — which is exactly how you end up feeding `torque` into the
-    # `power` column and getting confident nonsense with no error.
+    # This passes a named DataFrame rather than a bare numpy array on purpose.
+    # The model was fitted with column names, so scikit-learn raises if the names
+    # or their order do not match. A plain array accepts any ordering silently,
+    # which is how you end up feeding `torque` into the `power` column and
+    # getting a confident wrong answer with no error.
     row = pd.DataFrame([[derived[name] for name in features]], columns=features)
 
     proba = model.predict_proba(row)[0]
@@ -144,10 +144,10 @@ def estimate_rul(features: dict[str, float], product_type: str = "M") -> dict[st
     """
     Remaining useful life for one reading.
 
-    The PHYSICS value is authoritative — see scripts/train_rul_model.py for the
+    The physics value is the one that counts. scripts/train_rul_model.py has the
     measurements showing the learned model just reproduces it. The model value is
-    reported alongside as a cross-check, together with the spread across trees,
-    which is only non-zero near the constraint switch-over.
+    reported alongside as a cross-check, with the spread across trees, which is
+    only non-zero near the point where the binding constraint switches.
     """
     estimate = rul.physics_rul(features, product_type)
     payload = estimate.to_dict()
@@ -162,10 +162,10 @@ def estimate_rul(features: dict[str, float], product_type: str = "M") -> dict[st
         row = pd.DataFrame([[features[name] for name in columns]], columns=columns)
         forest = bundle["model"]
 
-        # The forest itself was fitted with column names, so predict() on the
-        # named frame validates the ordering for us. The individual trees inside
-        # it were fitted on the raw array, so they must be given .to_numpy() —
-        # passing the frame works but emits a warning per tree, per call.
+        # The forest was fitted with column names, so predict() on the named
+        # frame checks the ordering for us. The individual trees inside it were
+        # fitted on the raw array, so they need .to_numpy(). Passing the frame
+        # works but emits a warning per tree, per call.
         payload["model_remaining_min"] = round(float(forest.predict(row)[0]), 1)
         raw = row.to_numpy()
         per_tree = np.array([tree.predict(raw)[0] for tree in forest.estimators_])

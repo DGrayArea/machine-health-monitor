@@ -1,17 +1,17 @@
 """
-The machine's operating envelope — ONE definition, used everywhere.
+The machine's operating envelope, defined once and used everywhere.
 
-This module is imported by BOTH:
-  * scripts/clean_data.py  (offline: labelling the training set)
-  * backend/alerts.py      (online: deciding what to tell the operator)
+Two places import this module:
+  scripts/clean_data.py  labels the training set offline
+  backend/alerts.py      decides what to tell the operator live
 
-That matters. If the offline labels used one set of thresholds and the live
-alerting used another, the model would be trained to detect one thing and
-deployed to explain a different thing — a classic and very hard-to-spot bug.
-tests/test_thresholds.py asserts the two paths agree on all 10,000 rows.
+Keeping them on the same numbers matters. If the offline labels used one set of
+thresholds and the live alerting used another, the model would be trained to
+spot one thing and deployed to explain something slightly different, which is a
+quiet bug and a horrible one to find. tests/test_thresholds.py checks the two
+paths agree across all 10,000 rows.
 
-Everything here comes from the AI4I 2020 dataset's documented failure physics.
-Nothing is a made-up number.
+Every number here comes from the AI4I 2020 dataset's documented failure physics.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ import math
 from dataclasses import dataclass
 
 # --------------------------------------------------------------------------
-# FAULT thresholds — the physical limits at which the machine actually fails.
+# Fault thresholds: the limits at which the machine actually fails.
 # --------------------------------------------------------------------------
 HDF_TEMP_DIFF_K = 8.6        # heat dissipation failure below this delta-T ...
 HDF_SPEED_RPM = 1380         # ... while also below this rotational speed
@@ -35,8 +35,8 @@ TWF_WEAR_MIN_MIN = 200       # tools start breaking at this much wear
 TWF_WEAR_MAX_MIN = 240       # tools are always dead by here
 
 # --------------------------------------------------------------------------
-# WARNING thresholds — margin BEFORE the fault limit. This is the whole point
-# of predictive maintenance: catch it here, not at the line above.
+# Warning thresholds: margin before the fault limit. Catching a problem here
+# rather than at the line above is the point of predictive maintenance.
 # --------------------------------------------------------------------------
 WARN_TEMP_DIFF_K = 9.5       # ~10% margin above the 8.6 K failure delta-T
 WARN_SPEED_RPM = 1500        # ~9% margin above the 1380 rpm failure speed
@@ -46,13 +46,13 @@ WARN_STRAIN_FRACTION = 0.85  # 85% of the tier's overstrain limit
 WARN_WEAR_MIN = 180          # last ~10% of the 200 min expected tool life
 
 # --------------------------------------------------------------------------
-# Plausibility bounds — outside these, believe the sensor is broken, not the
-# machine. Used by the cleaner to drop rows and by the API to reject payloads.
+# Plausibility bounds. Outside these, assume the sensor is broken rather than
+# the machine. The cleaner drops such rows and the API rejects such payloads.
 # --------------------------------------------------------------------------
 PLAUSIBLE: dict[str, tuple[float, float]] = {
     "air_temp": (250.0, 350.0),      # K
     "process_temp": (250.0, 360.0),  # K
-    "rot_speed": (1.0, 5000.0),      # rpm — must be turning
+    "rot_speed": (1.0, 5000.0),      # rpm, and it must be turning
     "torque": (0.0, 200.0),          # Nm
     "tool_wear": (0.0, 500.0),       # min
 }
@@ -73,15 +73,16 @@ def derive_features(
     product_type: str = "M",
 ) -> dict[str, float]:
     """
-    Turn 5 raw sensor channels + quality tier into the 9 model features.
+    Turn the five raw sensor channels plus the quality tier into the nine
+    model features.
 
-    This is the function that MUST match scripts/train_model.py's feature
-    construction exactly, which is why the trained bundle also stores the
-    feature order and the backend re-orders against it before predicting.
+    This has to match how scripts/train_model.py builds its features. That is
+    why the saved model bundle also stores the feature order, so the backend can
+    rebuild each row against it instead of trusting this to stay in step.
 
       temp_diff = process_temp - air_temp                [K]
       power     = torque * omega,  omega = rpm*2*pi/60   [W]
-      strain    = tool_wear * torque                     [min*Nm]
+      strain    = tool_wear * torque                     [min*N*m]
     """
     omega = rot_speed * 2.0 * math.pi / 60.0
     return {
@@ -99,20 +100,21 @@ def derive_features(
 
 @dataclass(frozen=True)
 class RuleHit:
-    """One tripped threshold rule, with everything the operator needs."""
-    rule_id: str          # stable id, e.g. "cooling"
+    """One tripped rule, with everything the operator needs to act on it."""
+    rule_id: str          # stable id, such as "cooling"
     severity: str         # "Warning" or "Fault"
-    title: str            # short human label
-    detail: str           # the actual measured value vs the limit
+    title: str            # short label
+    detail: str           # the measured value against the limit
     action: str           # what a technician should physically do
 
 
 def evaluate_rules(features: dict[str, float], product_type: str = "M") -> list[RuleHit]:
     """
-    Check every physical rule against one reading, worst-first.
+    Check every rule against one reading, worst first.
 
-    Returns EVERY rule that tripped, not just the first. A machine can be both
-    overheating and overstrained, and the technician needs to know both.
+    Returns all the rules that tripped, not just the first. A machine can be
+    overheating and overstrained at the same time, and the technician needs to
+    know about both.
     """
     hits: list[RuleHit] = []
     temp_diff = features["temp_diff"]
@@ -123,8 +125,8 @@ def evaluate_rules(features: dict[str, float], product_type: str = "M") -> list[
     osf_limit = OSF_STRAIN_LIMIT.get(product_type, OSF_STRAIN_LIMIT["L"])
 
     # ---- Heat dissipation -------------------------------------------------
-    # Cooling depends on forced convection, so low delta-T is only dangerous
-    # when the spindle is ALSO turning slowly (less airflow). Hence the AND.
+    # Cooling relies on air being pushed over the spindle, so a small delta-T is
+    # only dangerous when the spindle is turning slowly too. Hence the AND.
     if temp_diff < HDF_TEMP_DIFF_K and rot_speed < HDF_SPEED_RPM:
         hits.append(RuleHit(
             "cooling", "Fault", "Heat dissipation failure",
@@ -143,8 +145,8 @@ def evaluate_rules(features: dict[str, float], product_type: str = "M") -> list[
         ))
 
     # ---- Power envelope ---------------------------------------------------
-    # Two-sided: too little power means the drive is slipping or decoupled;
-    # too much means the cut is overloading the motor.
+    # Two-sided. Too little power means the drive is slipping or decoupled, too
+    # much means the cut is overloading the motor.
     if power > PWF_POWER_MAX_W:
         hits.append(RuleHit(
             "power_high", "Fault", "Power overload",
@@ -173,8 +175,8 @@ def evaluate_rules(features: dict[str, float], product_type: str = "M") -> list[
         ))
 
     # ---- Mechanical overstrain -------------------------------------------
-    # A worn tool needs more torque for the same cut, so wear x torque is the
-    # quantity that actually breaks the tool — not either one alone.
+    # A worn tool needs more torque for the same cut, so wear x torque is what
+    # breaks the tool. Neither one on its own tells you enough.
     if strain > osf_limit:
         hits.append(RuleHit(
             "overstrain", "Fault", "Mechanical overstrain",
@@ -207,13 +209,13 @@ def evaluate_rules(features: dict[str, float], product_type: str = "M") -> list[
             f"{max(TWF_WEAR_MIN_MIN - tool_wear, 0):.0f} minutes of cutting.",
         ))
 
-    # Faults first, so hits[0] is always the most urgent thing on screen.
+    # Faults first, so hits[0] is the most urgent thing on screen.
     hits.sort(key=lambda h: 0 if h.severity == "Fault" else 1)
     return hits
 
 
 def is_plausible(features: dict[str, float]) -> tuple[bool, str | None]:
-    """Reject readings that are physically impossible — a broken sensor."""
+    """Reject readings that are physically impossible, meaning a broken sensor."""
     for channel, (lo, hi) in PLAUSIBLE.items():
         value = features.get(channel)
         if value is None:
@@ -221,6 +223,6 @@ def is_plausible(features: dict[str, float]) -> tuple[bool, str | None]:
         if not (lo <= value <= hi):
             return False, (
                 f"{channel}={value} is outside the plausible range "
-                f"[{lo}, {hi}] — suspect a sensor fault, not a machine fault."
+                f"[{lo}, {hi}]. Suspect a sensor fault, not a machine fault."
             )
     return True, None

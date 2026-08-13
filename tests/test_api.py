@@ -1,9 +1,9 @@
 """
-Unit tests for the backend API.
+Tests for the backend API.
 
-Covers the three things that would silently break the whole system:
-  1. Auth actually protects the endpoints (not just the login page).
-  2. /api/predict returns a valid status + confidence for real readings.
+These cover the three things that would quietly break the whole system:
+  1. Login actually protects the endpoints, not just the login page.
+  2. /api/predict returns a valid status and confidence for real readings.
   3. Every prediction and alert reaches the audit trail.
 """
 
@@ -44,7 +44,7 @@ def test_login_succeeds_with_demo_credentials(client):
 def test_login_rejects_bad_credentials(client, payload):
     res = client.post("/api/auth/login", json=payload)
     assert res.status_code == 401
-    # The message must not reveal WHICH half was wrong.
+    # The message must not reveal which half was wrong.
     assert "username or password" in res.json()["detail"].lower()
 
 
@@ -70,7 +70,7 @@ def test_garbage_token_is_rejected(client):
 
 
 def test_token_signed_with_the_wrong_key_is_rejected(client):
-    """The whole point of signing: a self-made token must not be accepted."""
+    """The point of signing: a self-made token must not be accepted."""
     import jwt
     forged = jwt.encode({"sub": config.DEMO_USERNAME, "exp": 9999999999},
                         "attacker-key", algorithm="HS256")
@@ -128,7 +128,7 @@ def test_overloaded_reading_produces_a_critical_alert(
     if not model_available:
         pytest.skip("no trained model")
 
-    # ~10.5 kW: well past the 9 kW power limit.
+    # About 10.5 kW, well past the 9 kW power limit.
     reading = {"air_temp": 300.0, "process_temp": 311.0, "rot_speed": 1400,
                "torque": 72.0, "tool_wear": 30, "product_type": "M"}
     body = client.post("/api/predict", json=reading, headers=auth_headers).json()
@@ -140,7 +140,7 @@ def test_overloaded_reading_produces_a_critical_alert(
 
 
 @pytest.mark.parametrize("field,value", [
-    ("rot_speed", 0),          # a stopped spindle is a sensor fault
+    ("rot_speed", 0),          # a stopped spindle means a sensor fault
     ("rot_speed", 99999),
     ("air_temp", 100),         # below any plausible ambient
     ("torque", -5),
@@ -179,7 +179,7 @@ def test_prediction_is_written_to_the_audit_trail(
     assert rows[0]["username"] == config.DEMO_USERNAME
     assert rows[0]["status"] == "Normal"
 
-    # ...and to the append-only flat log as well.
+    # And to the append-only flat log as well.
     assert config.AUDIT_LOG_PATH.exists()
     assert '"event": "prediction"' in config.AUDIT_LOG_PATH.read_text()
 
@@ -201,12 +201,12 @@ def test_alert_is_written_to_the_audit_trail(client, auth_headers, model_availab
     assert len(listed) == 1
     assert listed[0]["severity"] == "Critical"
 
-    # The dashboard's "Detail" column reads triggered_rules[0].detail — if the
-    # API drops that field the column silently renders "—" for every row.
+    # The dashboard's Detail column reads triggered_rules[0].detail, so if the
+    # API drops that field the column quietly shows a dash on every row.
     rules = listed[0]["triggered_rules"]
     assert rules, "alert history must carry the rules that tripped"
     assert rules[0]["detail"]
-    # Operator-facing text uses display units (kW), not the raw SI watts.
+    # Operator-facing text uses display units, kW, not the raw SI watts.
     assert "9.0 kW limit" in rules[0]["detail"]
 
 
@@ -293,15 +293,15 @@ def test_csv_report_downloads_with_a_header_row(
 
     lines = res.text.strip().splitlines()
     assert lines[0].startswith("timestamp,source,status,confidence")
-    # Column names must carry their unit so the file is self-describing.
+    # Column names carry their unit, so the file says what it contains.
     assert "air_temp_c" in lines[0] and "power_kw" in lines[0]
     assert len(lines) == 2
 
-    # ...and the values must actually be converted, not just relabelled.
+    # The values must actually be converted, not just relabelled.
     row = dict(zip(lines[0].split(","), lines[1].split(",")))
     assert float(row["air_temp_c"]) == pytest.approx(298.1 - 273.15, abs=0.01)
     assert float(row["power_kw"]) == pytest.approx(6.95, abs=0.01)
-    # A temperature *difference* converts 1:1 — no offset subtracted.
+    # A temperature difference converts one to one, with no offset subtracted.
     assert float(row["temp_diff_c"]) == pytest.approx(10.5, abs=0.01)
 
 

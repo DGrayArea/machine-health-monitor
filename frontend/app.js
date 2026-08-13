@@ -1,23 +1,22 @@
-/* Machine Health Monitor — dashboard logic.
+/* Machine Health Monitor dashboard.
  *
- * Deliberately plain JavaScript: no framework, no build step, no CDN. You can
- * open this file and read every line that puts a pixel on the screen, which
- * matters when you have to explain the project.
+ * Plain JavaScript on purpose: no framework, no build step, no CDN. Every line
+ * that puts something on the screen can be read directly, which matters when
+ * you have to explain the project.
  *
  * Flow:
- *   1. Log in  -> POST /api/auth/login -> keep the JWT in sessionStorage.
- *   2. Poll    -> GET /api/live every ~1.5 s (the simulator's tick rate).
- *   3. Render  -> status banner, sensor tiles, trend chart, alert table.
+ *   1. Log in, POST /api/auth/login, keep the JWT in sessionStorage.
+ *   2. Poll GET /api/live every 1.5 s, matching the simulator's tick rate.
+ *   3. Render the status banner, sensor tiles, trend chart and alert table.
  *
- * WHY POLLING AND NOT WEBSOCKETS
- *   The simulator produces one reading every 1.5 s. At that rate a WebSocket
- *   saves almost nothing but adds reconnect logic, heartbeats and a second code
- *   path to debug. Polling is the right amount of machinery for the job — and
- *   if the connection drops, the next poll simply succeeds.
+ * Polling rather than WebSockets
+ *   The simulator produces one reading every 1.5 s. At that rate a socket saves
+ *   almost nothing but adds reconnect logic, heartbeats and a second code path
+ *   to debug. If a poll fails, the next one simply works.
  *
- * WHY sessionStorage AND NOT localStorage
+ * sessionStorage rather than localStorage
  *   sessionStorage is cleared when the tab closes, so an unattended machine on
- *   the shop floor does not stay logged in indefinitely.
+ *   a shop floor does not stay logged in indefinitely.
  */
 
 'use strict';
@@ -43,7 +42,7 @@ async function api(path, options = {}) {
 
   const res = await fetch(path, Object.assign({}, options, { headers }));
 
-  // 401 means the token expired or was never valid -> back to the login screen.
+  // 401 means the token expired or was never valid, so go back to the login.
   if (res.status === 401) {
     logout();
     throw new Error('Session expired — please sign in again.');
@@ -123,8 +122,8 @@ let alertPollCounter = 0;
 
 async function tick() {
   await refresh();
-  // The alert table changes far less often than the readings, so refresh it
-  // every 4th poll instead of every one. Fewer queries, same user experience.
+  // The alert table changes much less often than the readings, so refresh it
+  // every fourth poll. Fewer queries, and it looks the same.
   if (++alertPollCounter % 4 === 0) await loadAlerts();
 }
 
@@ -147,7 +146,7 @@ async function refresh() {
 }
 
 /* ------------------------------------------------------------------ */
-/* Rendering — current status                                          */
+/* Rendering: current status                                           */
 /* ------------------------------------------------------------------ */
 
 const SUBTITLE = {
@@ -171,7 +170,7 @@ function renderCurrent(record) {
     ? 'Machine Health Monitor'
     : `(${status}) Machine Health Monitor`;
 
-  // Recommended action card — only shown when there is something to do.
+  // The action card is only shown when there is something to do.
   const card = $('action-card');
   if (record.alert) {
     card.hidden = false;
@@ -187,8 +186,8 @@ function renderCurrent(record) {
   renderRemainingLife(record.remaining_life);
 }
 
-/* Remaining useful life. The headline number is the PHYSICS estimate — see
- * backend/rul.py for why the learned model is shown only as a cross-check. */
+/* Remaining useful life. The headline number is the physics estimate. See
+ * backend/rul.py for why the learned model is only shown as a cross-check. */
 const BINDING_LABEL = {
   tool_wear: 'tool wear (200 min life)',
   overstrain: 'overstrain at this torque',
@@ -204,7 +203,7 @@ function renderRemainingLife(life) {
   card.className = `rul-card is-${life.band}`;
   $('rul-min').textContent = Math.round(life.remaining_min);
 
-  // The bar fills as life is consumed, so a full bar means "change it now".
+  // The bar fills as life is used up, so a full bar means change it now.
   $('rul-fill').style.width = `${Math.round(life.fraction_consumed * 100)}%`;
 
   const ceiling = life.total_usable_min;
@@ -213,10 +212,10 @@ function renderRemainingLife(life) {
     : `${Math.round(life.fraction_consumed * 100)}% of this tool's `
       + `${Math.round(ceiling)} min usable life consumed.`;
 
-  // Wall-clock projection. Null until enough readings exist to measure a rate —
-  // we show a dash rather than inventing a deadline.
-  // wear_rate_per_min is normalised: 1.0 = wearing at exactly the rate of the
-  // clock, 1.6 = burning tool life 60% faster than nominal because of the load.
+  // Clock-time projection, null until there are enough readings to measure a
+  // rate. Show a dash rather than inventing a deadline.
+  // wear_rate_per_min is normalised, so 1.0 means wearing at exactly the rate
+  // of the clock and 1.6 means losing tool life 60% faster because of the load.
   const wallclock = life.wallclock_remaining_min;
   const rate = life.wear_rate_per_min;
   $('rul-wallclock').textContent = wallclock == null
@@ -226,8 +225,8 @@ function renderRemainingLife(life) {
   $('rul-binding').textContent = BINDING_LABEL[life.binding_constraint]
     || life.binding_constraint;
 
-  // The model agrees to within a fraction of a minute almost everywhere; where
-  // it does not, sigma is the honest signal. Show both.
+  // The model agrees to within a fraction of a minute almost everywhere. Where
+  // it does not, sigma is the signal, so show both.
   $('rul-model').textContent = life.model_remaining_min == null
     ? 'not loaded'
     : `${life.model_remaining_min} ± ${life.model_sigma_min} min`;
@@ -240,21 +239,21 @@ function formatDuration(minutes) {
   return `${hours} h ${Math.round(minutes % 60)} min`;
 }
 
-/* UNITS: the API speaks SI (kelvin, watts) because that is what the model was
- * trained on — see backend/units.py. The dashboard converts to what an engineer
- * actually reads off a panel (°C, kW).
+/* Units: the API speaks SI, kelvin and watts, because that is what the model
+ * was trained on. See backend/units.py. The dashboard converts to what an
+ * engineer reads off a panel, so °C and kW.
  *
- * `show` converts raw -> display. `min`/`max` are in DISPLAY units so the bar
- * fill matches the number above it. `status` deliberately takes the RAW value,
- * so the colour bands stay tied to the backend's thresholds and cannot drift
- * out of sync with a display change. */
+ * `show` converts raw to display. `min` and `max` are in display units so the
+ * bar fill matches the number above it. `status` deliberately takes the raw
+ * value, so the colour bands stay tied to the backend thresholds and cannot
+ * drift out of step with a display change. */
 const K_OFFSET = 273.15;
 
 const TILES = {
   air_temp:     { show: (v) => v - K_OFFSET, min: 20, max: 35, digits: 1 },
   process_temp: { show: (v) => v - K_OFFSET, min: 30, max: 45, digits: 1 },
-  // A temperature DIFFERENCE of 10 K is 10 °C — the offset cancels, so no
-  // conversion here. Only the label changes.
+  // A temperature difference of 10 K is 10 °C, since the offset cancels, so
+  // there is no conversion here. Only the label changes.
   temp_diff:    { show: (v) => v, min: 0, max: 15, digits: 1,
                   status: (v) => (v < 8.6 ? 'fault' : v < 9.5 ? 'warning' : 'ok') },
   rot_speed:    { show: (v) => v, min: 800, max: 2800, digits: 0 },
@@ -284,7 +283,7 @@ function renderTiles(record) {
       ((display - cfg.min) / (cfg.max - cfg.min)) * 100));
     tile.querySelector('.tile-bar i').style.width = `${pct}%`;
 
-    // Status bands are evaluated on the RAW SI value, matching the backend.
+    // Status bands are evaluated on the raw SI value, matching the backend.
     const state = cfg.status ? cfg.status(raw) : 'ok';
     tile.classList.toggle('is-warning', state === 'warning');
     tile.classList.toggle('is-fault', state === 'fault');
@@ -292,13 +291,13 @@ function renderTiles(record) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Rendering — trend chart (hand-drawn on a canvas)                    */
+/* Rendering: trend chart, hand-drawn on a canvas                      */
 /* ------------------------------------------------------------------ */
 
-/* `from` names the sub-object on each record that holds the value. Remaining
- * life is plotted instead of raw tool wear because it is the decision-relevant
- * quantity: it already accounts for torque lowering the ceiling, so a heavy cut
- * makes this line drop faster AND from a lower starting point. */
+/* `from` names the sub-object on each record holding the value. Remaining life
+ * is plotted rather than raw tool wear because it is the quantity decisions are
+ * made on: it already accounts for torque lowering the ceiling, so a heavy cut
+ * makes this line drop faster and from a lower start. */
 const SERIES = [
   { key: 'power',         from: 'derived',        colour: '#4c8dd6', min: 2000, max: 11000 },
   { key: 'temp_diff',     from: 'derived',        colour: '#58c0b0', min: 6,    max: 14 },
@@ -311,8 +310,8 @@ function drawChart(records) {
   const canvas = $('chart');
   const ctx = canvas.getContext('2d');
 
-  // Match the canvas backing store to the CSS size AND the device pixel ratio,
-  // otherwise lines look blurry on a retina screen.
+  // Match the canvas backing store to the CSS size and the device pixel ratio,
+  // otherwise the lines look blurry on a retina screen.
   const dpr = window.devicePixelRatio || 1;
   const width = canvas.clientWidth;
   const height = 220;
@@ -341,9 +340,9 @@ function drawChart(records) {
   if (records.length < 2) return;
   const stepX = plotW / (records.length - 1);
 
-  // Each series is normalised into the same 0..1 plot area, because power (W),
-  // ΔT (K) and wear (min) have wildly different magnitudes and units. This is a
-  // shape comparison, not a value comparison — the tiles show exact values.
+  // Each series is normalised into the same 0..1 plot area, since power, ΔT and
+  // remaining life have nothing like the same magnitude or units. This is a
+  // comparison of shapes; the tiles carry the exact values.
   SERIES.forEach((series) => {
     ctx.beginPath();
     ctx.strokeStyle = series.colour;
@@ -360,8 +359,8 @@ function drawChart(records) {
     ctx.stroke();
   });
 
-  // A status strip under the chart: one bar per reading, coloured by verdict.
-  // This makes the Normal -> Warning -> Fault progression readable at a glance.
+  // A strip under the chart, one bar per reading coloured by verdict, which
+  // makes the Normal to Warning to Fault progression readable at a glance.
   const strip = $('chart-status');
   strip.innerHTML = '';
   records.forEach((rec) => {
@@ -402,11 +401,11 @@ async function loadAlerts() {
       tr.appendChild(cell(a.recommended_action));
       body.appendChild(tr);
     });
-  } catch (_) { /* transient — the next poll retries */ }
+  } catch (_) { /* transient, the next poll retries */ }
 }
 
-/* textContent, never innerHTML: alert text originates from the backend, and
- * building rows as text means a stray "<" can never become markup. */
+/* textContent, never innerHTML. The alert text comes from the backend, and
+ * building rows as text means a stray "<" can never turn into markup. */
 function cell(text, className) {
   const td = document.createElement('td');
   td.textContent = text;
@@ -446,9 +445,9 @@ document.querySelectorAll('[data-inject]').forEach((btn) => {
   });
 });
 
-/* Downloads go through fetch(), not a plain <a href>, because a link cannot
- * carry the Authorization header. We pull the file into a Blob and click a
- * temporary object-URL link instead. */
+/* Downloads go through fetch() rather than a plain <a href>, because a link
+ * cannot carry the Authorization header. The file is pulled into a Blob and a
+ * temporary object URL is clicked instead. */
 async function download(path, fallbackName) {
   say('Generating report…');
   try {
@@ -477,7 +476,7 @@ $('dl-csv').addEventListener('click', () => download('/api/report/csv', 'report.
 $('dl-pdf').addEventListener('click', () => download('/api/report/pdf', 'report.pdf'));
 
 /* ------------------------------------------------------------------ */
-/* Boot — restore an existing session if the token is still valid       */
+/* Boot: restore an existing session if the token is still valid        */
 /* ------------------------------------------------------------------ */
 
 (async function boot() {

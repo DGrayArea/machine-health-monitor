@@ -1,13 +1,12 @@
 """
-Step 8 — Downloadable maintenance reports (CSV and PDF).
+Downloadable maintenance reports, in CSV and PDF.
 
-Both formats are built in memory and streamed straight to the browser, and a
-copy is saved under outputs/exports/ so there is a durable record of exactly
-what was handed to whoever asked for it.
+Both are built in memory and streamed to the browser, and a copy is saved under
+outputs/exports/ so there is a record of exactly what was handed over.
 
-  CSV — one row per reading, for further analysis in Excel/pandas.
-  PDF — a formatted shift report: summary counts, the alerts that fired with
-        their recommended actions, and a table of the most recent readings.
+  CSV: one row per reading, for further work in Excel or pandas.
+  PDF: a shift report with summary counts, the alerts that fired and their
+       recommended actions, and a table of the most recent readings.
 """
 
 from __future__ import annotations
@@ -43,9 +42,9 @@ STATUS_COLOUR = {
     "Info": colors.HexColor("#6b7280"),
 }
 
-# Column names carry their unit, so a downloaded file is self-describing and
-# nobody has to guess whether a temperature is kelvin or Celsius. The values are
-# converted from the SI units stored internally — see backend/units.py.
+# Column names carry their unit, so nobody has to guess whether a temperature is
+# kelvin or Celsius. The values are converted from the SI units stored
+# internally. See backend/units.py.
 CSV_COLUMNS = [
     "timestamp", "source", "status", "confidence",
     "air_temp_c", "process_temp_c", "temp_diff_c",
@@ -56,12 +55,12 @@ CSV_COLUMNS = [
 
 
 def _save_copy(filename: str, payload: bytes) -> None:
-    """Keep a copy of every generated report under outputs/exports/."""
+    """Keep a copy of each generated report under outputs/exports/."""
     try:
         config.EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
         (config.EXPORTS_DIR / filename).write_bytes(payload)
     except OSError:
-        pass  # never fail a download because the archive copy could not be written
+        pass  # do not fail a download just because the archive copy failed
 
 
 def timestamped_name(extension: str) -> str:
@@ -70,7 +69,7 @@ def timestamped_name(extension: str) -> str:
 
 
 def build_csv(predictions: list[dict[str, Any]]) -> tuple[str, bytes]:
-    """One row per reading, oldest first (chronological reads better)."""
+    """One row per reading, oldest first, which reads better chronologically."""
     buf = io.StringIO()
     writer = csv.DictWriter(buf, fieldnames=CSV_COLUMNS, extrasaction="ignore")
     writer.writeheader()
@@ -85,7 +84,7 @@ def build_csv(predictions: list[dict[str, Any]]) -> tuple[str, bytes]:
                 float(row.get("air_temp", 0))), 2),
             "process_temp_c": round(units.kelvin_to_celsius(
                 float(row.get("process_temp", 0))), 2),
-            # A temperature difference converts 1:1 — no offset.
+            # A temperature difference converts one to one, with no offset.
             "temp_diff_c": round(units.delta_kelvin_to_celsius(
                 float(row.get("temp_diff", 0))), 2),
             "rot_speed_rpm": round(float(row.get("rot_speed", 0)), 1),
@@ -94,7 +93,7 @@ def build_csv(predictions: list[dict[str, Any]]) -> tuple[str, bytes]:
                 float(row.get("power", 0))), 3),
             "tool_wear_min": round(float(row.get("tool_wear", 0)), 1),
             "strain_min_nm": round(float(row.get("strain", 0)), 1),
-            # Predictions logged before RUL existed have NULL here — leave the
+            # Predictions logged before RUL existed have NULL here, so leave the
             # cell empty rather than writing a misleading 0.
             "rul_min": "" if rul is None else round(float(rul), 1),
             "rul_binding": row.get("rul_binding"),
@@ -266,7 +265,7 @@ def build_pdf(
 
 
 def normalise_alert_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """DB rows store triggered_rules as a JSON string; decode for the API."""
+    """Database rows store triggered_rules as a JSON string. Decode for the API."""
     out = []
     for r in rows:
         r = dict(r)

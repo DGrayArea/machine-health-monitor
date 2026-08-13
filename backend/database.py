@@ -1,19 +1,20 @@
 """
-Audit trail — every prediction and every alert is written to durable storage.
+The audit trail. Every prediction and alert is written to durable storage.
 
-TWO SINKS, ON PURPOSE:
-  1. SQLite (backend/monitoring.db) — queryable. The dashboard's alert history
-     and the downloadable report are both SQL queries against this.
-  2. JSONL  (backend/audit_log.jsonl) — append-only, one JSON object per line.
-     Never updated, never deleted. If someone tampers with the database, the
-     flat log still shows what the system actually saw and said.
+Two sinks, on purpose:
+  SQLite (outputs/logs/monitoring.db) is queryable. The dashboard's alert
+  history and the downloadable reports are both queries against it.
 
-In maintenance work the audit trail is not a nice-to-have: if the machine breaks
-and the system said "Normal" five minutes earlier, you need to be able to prove
-exactly what readings it was given.
+  JSONL (outputs/logs/audit_log.jsonl) is append-only, one JSON object per line,
+  never updated or deleted. If the database is tampered with, the flat log still
+  shows what the system saw and what it said.
 
-We use stdlib `sqlite3` rather than an ORM — the schema is two tables, and
-keeping the SQL visible makes the data model easy to explain.
+For maintenance work this is not optional. If the machine breaks and the system
+said "Normal" five minutes earlier, you need to be able to show exactly what
+readings it was given.
+
+This uses the stdlib sqlite3 rather than an ORM. The schema is two tables, and
+keeping the SQL visible makes the data model easier to explain.
 """
 
 from __future__ import annotations
@@ -28,7 +29,8 @@ from typing import Any
 from backend import config
 
 # SQLite allows one writer at a time. The simulator thread and the HTTP handlers
-# both write, so we guard writes with a lock and open with check_same_thread=False.
+# both write, so writes are guarded by a lock and the connection is opened with
+# check_same_thread=False.
 _lock = threading.Lock()
 _conn: sqlite3.Connection | None = None
 
@@ -68,7 +70,7 @@ CREATE TABLE IF NOT EXISTS alerts (
     triggered_rules    TEXT NOT NULL    -- JSON blob
 );
 
--- The dashboard always asks for "most recent N", so index the sort column.
+-- The dashboard always asks for the most recent N, so index the sort column.
 CREATE INDEX IF NOT EXISTS idx_pred_ts  ON predictions(timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_alert_ts ON alerts(timestamp DESC);
 """
@@ -76,21 +78,21 @@ CREATE INDEX IF NOT EXISTS idx_alert_ts ON alerts(timestamp DESC);
 
 def utc_now() -> str:
     """
-    ISO-8601 UTC. Always store UTC; convert to local time only for display.
+    ISO-8601 UTC. Always store UTC and convert to local time only for display.
 
-    Millisecond precision, not seconds: MHM_SIM_INTERVAL can be set below 1 s,
-    and the RUL wear-rate estimator fits a slope against these timestamps. At
-    second resolution a fast tick rate would give several readings the identical
-    timestamp, the slope would divide by zero, and the wall-clock projection
-    would silently disappear.
+    Millisecond precision rather than seconds, because MHM_SIM_INTERVAL can be
+    set below 1 s and the RUL wear-rate estimator fits a slope against these
+    timestamps. At second resolution a fast tick rate would give several readings
+    the same timestamp, the slope would divide by zero, and the clock-time
+    projection would quietly disappear.
     """
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds")
 
 
-# Columns added after the first release. `CREATE TABLE IF NOT EXISTS` will not
-# touch a table that already exists, so an audit database created before RUL
-# existed would silently keep the old shape and every insert would fail. SQLite
-# has no `ADD COLUMN IF NOT EXISTS`, so we check PRAGMA table_info first.
+# Columns added after the first release. CREATE TABLE IF NOT EXISTS leaves an
+# existing table alone, so a database created before RUL existed would keep the
+# old shape and every insert would fail. SQLite has no ADD COLUMN IF NOT EXISTS,
+# so check PRAGMA table_info first.
 MIGRATIONS: dict[str, list[tuple[str, str]]] = {
     "predictions": [
         ("rul_minutes", "REAL"),
@@ -122,7 +124,7 @@ def get_connection() -> sqlite3.Connection:
 
 
 def init_db(db_path: Path | None = None) -> None:
-    """Create the schema. Passing db_path lets tests point at a temp file."""
+    """Create the schema. Passing db_path lets tests point at a temporary file."""
     global _conn
     if db_path is not None:
         config.DB_PATH = db_path
@@ -133,7 +135,7 @@ def init_db(db_path: Path | None = None) -> None:
 
 
 def _append_audit(event_type: str, payload: dict[str, Any]) -> None:
-    """Append-only flat log. Failure to write here must never break a request."""
+    """Append-only flat log. A failure here must never break a request."""
     try:
         config.AUDIT_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
         line = json.dumps({"event": event_type, "logged_at": utc_now(), **payload},
@@ -141,7 +143,7 @@ def _append_audit(event_type: str, payload: dict[str, Any]) -> None:
         with config.AUDIT_LOG_PATH.open("a") as fh:
             fh.write(line + "\n")
     except OSError:
-        pass  # audit log is best-effort; the DB is the system of record
+        pass  # the flat log is best-effort, the database is the record
 
 
 def log_prediction(
@@ -156,7 +158,7 @@ def log_prediction(
     timestamp: str | None = None,
     remaining_life: dict[str, Any] | None = None,
 ) -> int:
-    """Persist one prediction. Returns its row id so an alert can reference it."""
+    """Save one prediction. Returns the row id so an alert can point at it."""
     ts = timestamp or utc_now()
     life = remaining_life or {}
     conn = get_connection()
@@ -225,7 +227,7 @@ def log_alert(
 
 
 def log_auth_event(username: str, success: bool, reason: str = "") -> None:
-    """Login attempts go in the audit log too — who looked at the machine, when."""
+    """Login attempts are logged too: who looked at the machine, and when."""
     _append_audit("auth", {"username": username, "success": success, "reason": reason})
 
 
@@ -244,7 +246,7 @@ def recent_predictions(limit: int = 200) -> list[dict[str, Any]]:
 
 
 def summary_counts() -> dict[str, int]:
-    """Status totals for the report header."""
+    """Status totals, used in the report header."""
     rows = get_connection().execute(
         "SELECT status, COUNT(*) AS n FROM predictions GROUP BY status"
     ).fetchall()

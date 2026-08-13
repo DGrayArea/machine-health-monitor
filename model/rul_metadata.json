@@ -1,5 +1,5 @@
 {
-  "trained_at": "2026-08-13T01:09:32",
+  "trained_at": "2026-08-13T01:59:22",
   "model_type": "RandomForestRegressor",
   "target": "rul_minutes",
   "features": [
@@ -15,8 +15,8 @@
   ],
   "scores": {
     "full": {
-      "mae": 0.37843078555673376,
-      "rmse": 2.099097113298262,
+      "mae": 0.3784307855567338,
+      "rmse": 2.0990971132982623,
       "r2": 0.9989186842136519,
       "mae_live_only": 0.3828384291971139
     },

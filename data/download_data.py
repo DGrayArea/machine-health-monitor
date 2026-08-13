@@ -1,20 +1,19 @@
 """
-Step 1 — Acquire the dataset.
+Getting the dataset.
 
-We use the **AI4I 2020 Predictive Maintenance Dataset**. This is the exact same
-10,000-row table that Kaggle publishes as "Machine Predictive Maintenance
-Classification" — Kaggle mirrors it from the UCI Machine Learning Repository.
+This uses the AI4I 2020 Predictive Maintenance Dataset, the same 10,000-row
+table Kaggle publishes as "Machine Predictive Maintenance Classification".
+Kaggle mirrors it from the UCI Machine Learning Repository.
 
-We pull from UCI instead of Kaggle because UCI needs no API token, so this
-script runs on any machine with no setup. If you would rather cite Kaggle
-directly, see the `--kaggle` note at the bottom of this file.
+We pull from UCI rather than Kaggle because UCI needs no API token, so this runs
+anywhere with no setup. There is a note at the bottom of this file if you would
+rather cite Kaggle directly.
 
-Why this dataset for a mechatronics project:
-    It is *synthetic but physically grounded*. Each failure mode in it is
-    generated from a real machine-physics rule (heat dissipation, power
-    envelope, mechanical overstrain, tool wear). That means we can write
-    threshold logic that a mechanical engineer can actually defend, rather than
-    picking cut-offs out of thin air.
+Why this dataset suits a mechatronics project: it is synthetic but grounded in
+real physics. Each failure mode is generated from an actual machine-physics rule
+covering heat dissipation, the power envelope, mechanical overstrain and tool
+wear. That means the threshold logic can be justified rather than picked out of
+thin air.
 
 Usage:
     python data/download_data.py
@@ -66,7 +65,7 @@ def download() -> Path:
 
 
 def preview(path: Path) -> None:
-    """Print the header and first two rows so you can eyeball the schema."""
+    """Print the header and first two rows, to check the schema by eye."""
     with path.open() as fh:
         for i, line in enumerate(fh):
             if i > 2:

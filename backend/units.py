@@ -1,29 +1,24 @@
 """
-Units — one canonical internal unit per quantity, converted only at the edges.
+One internal unit per quantity, converted only at the edges.
 
-THE RULE THIS FILE ENFORCES
-    Everything inside the system — the dataset, the model features, the
-    thresholds in backend/thresholds.py, the database, the JSON API — stores
-    **SI base units**: kelvin, watts, newton-metres. Conversion to
-    human-readable units happens ONLY at the presentation layer: the dashboard,
-    the PDF, and the CSV.
+Everything inside the system stores SI base units: kelvin, watts,
+newton-metres. That covers the dataset, the model features, the thresholds in
+backend/thresholds.py, the database and the JSON API. Conversion to friendlier
+units happens only where a person reads the number, so the dashboard, the PDF
+and the CSV.
 
-    Why not just store Celsius everywhere? Because the model was trained on
-    kelvin and the failure thresholds are quoted in kelvin. Converting at the
-    boundary means there is exactly one place where a unit can be wrong. If
-    Celsius leaked into the feature vector, the model would receive 25.4 where
-    it expects 298.5 and produce confident nonsense with no error raised.
+Why not store Celsius everywhere? The model was trained on kelvin and the
+failure thresholds are quoted in kelvin. Converting at the boundary keeps it to
+one place where a unit can go wrong. If Celsius reached the feature vector the
+model would get 25.4 where it expects 298.5 and return a wrong answer without
+raising anything. Unit mismatches are quiet, which is what makes them expensive,
+so the boundary is worth being explicit about.
 
-    This is the single most common source of silent bugs in instrumented
-    systems — the Mars Climate Orbiter was lost to exactly this class of
-    mistake — so the boundary is worth making explicit.
-
-DISPLAY UNITS
-    temperature   K      -> °C     (readable; 298.5 K means nothing on a panel)
-    temp. delta   K      -> °C     (a *difference* of 10 K IS 10 °C exactly)
-    power         W      -> kW     (spindle power is quoted in kW in every
-                                    machine-tool datasheet)
-    torque        N·m               already the practical SI unit
+Display units
+    temperature   K      -> °C     298.5 K means nothing on a panel
+    temp. delta   K      -> °C     a difference of 10 K is exactly 10 °C
+    power         W      -> kW     machine-tool datasheets quote kW
+    torque        N·m               already the practical unit
     speed         rpm               the standard for rotating machinery
     tool wear     min               minutes of cutting
     strain        min·N·m           wear x torque
@@ -47,12 +42,12 @@ def celsius_to_kelvin(celsius: float) -> float:
 
 def delta_kelvin_to_celsius(delta: float) -> float:
     """
-    Temperature DIFFERENCE K -> °C.
+    Temperature difference, K -> °C.
 
-    Identity, deliberately spelled out. A difference of 10 K is a difference of
-    10 °C — the offset cancels. Writing `temp_diff - 273.15` is a real and easy
-    mistake, so this function exists to make the correct behaviour explicit at
-    every call site rather than relying on whoever reads the code next.
+    This is the identity function, written out on purpose. A difference of 10 K
+    is a difference of 10 °C because the offset cancels. Writing
+    `temp_diff - 273.15` is an easy mistake to make, so this exists to make the
+    right behaviour obvious at every call site.
     """
     return delta
 
@@ -61,7 +56,7 @@ def watts_to_kilowatts(watts: float) -> float:
     return watts / 1000.0
 
 
-# Suffixes used on CSV column names so a downloaded file is self-describing.
+# Suffixes for CSV column names, so a downloaded file says what its units are.
 CSV_UNIT_SUFFIX = {
     "air_temp": "air_temp_c",
     "process_temp": "process_temp_c",

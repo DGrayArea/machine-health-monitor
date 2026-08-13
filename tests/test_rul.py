@@ -1,11 +1,11 @@
 """
-Unit tests for Remaining Useful Life (backend/rul.py).
+Tests for remaining useful life, in backend/rul.py.
 
-The headline behaviour these pin down:
-  * RUL is NOT just "200 - tool_wear" — high torque lowers the ceiling.
-  * The wear-rate estimator survives a tool change (a reset to zero).
-  * The RUL alert rule does not double-alert with the tool-wear threshold.
-  * The vectorised target in clean_data.py matches the scalar physics exactly.
+The behaviour these cover:
+  RUL is not just "200 - tool_wear", because high torque lowers the ceiling.
+  The wear-rate estimator survives a tool change, which resets wear to zero.
+  The RUL alert rule does not double up with the tool-wear threshold.
+  The vectorised target in clean_data.py matches the scalar physics.
 """
 
 from __future__ import annotations
@@ -56,16 +56,16 @@ def test_wear_consumes_life_one_for_one_at_moderate_load():
 
 def test_high_torque_lowers_the_ceiling_not_just_the_rate():
     """
-    THE key behaviour. At 75 Nm the overstrain ceiling is 12000/75 = 160 min, so
-    a tool at 150 min of wear has 10 minutes left — not the 50 that a tool-wear
-    threshold alone would report.
+    The behaviour that matters most. At 75 N·m the overstrain ceiling is
+    12000/75 = 160 min, so a tool at 150 min of wear has 10 minutes left, not
+    the 50 a tool-wear threshold on its own would report.
     """
     estimate = physics_rul(features(tool_wear=150, torque=75), "M")
     assert estimate.binding_constraint == "overstrain"
     assert estimate.total_usable_min == pytest.approx(160.0)
     assert estimate.remaining_min == pytest.approx(10.0)
 
-    # Same wear, gentler cut -> far more life left.
+    # Same wear, gentler cut, so far more life left.
     gentle = physics_rul(features(tool_wear=150, torque=40), "M")
     assert gentle.binding_constraint == "tool_wear"
     assert gentle.remaining_min == pytest.approx(50.0)
@@ -87,11 +87,11 @@ def test_rul_never_goes_negative():
 
 
 def test_idle_spindle_does_not_divide_by_zero():
-    """Zero torque means nothing is being cut, so overstrain is unreachable."""
+    """Zero torque means nothing is being cut, so overstrain cannot be reached."""
     estimate = physics_rul(features(tool_wear=50, torque=0.0), "M")
     assert estimate.binding_constraint == "tool_wear"
     assert estimate.remaining_min == pytest.approx(150.0)
-    # ...and it must serialise, because JSON has no infinity literal.
+    # It also has to serialise, since JSON has no infinity literal.
     assert estimate.to_dict()["strain_limited_min"] is None
 
 
@@ -138,7 +138,7 @@ def test_wear_rate_ignores_readings_before_a_tool_change():
 
 
 def test_wear_rate_is_none_when_wear_is_flat():
-    """An idle machine accrues no wear, so no deadline can be projected."""
+    """An idle machine gains no wear, so no deadline can be projected."""
     assert estimate_wear_rate(_history([50, 50, 50, 50, 50])) is None
 
 
@@ -151,19 +151,19 @@ def test_wallclock_projection():
 
 def test_wallclock_projection_cancels_simulator_time_compression():
     """
-    The simulator advances the tool ~88 wear-minutes per wall-clock minute so a
-    tool life is watchable in ~2 minutes. Dividing by that nominal rate must
-    recover a real-machine answer, not report "less than a minute left".
+    The simulator advances the tool about 88 wear-minutes per wall-clock minute,
+    so a tool life is watchable in a couple of minutes. Dividing by that nominal
+    rate has to give a real-machine answer, not "less than a minute left".
     """
     from backend.rul import normalise_wear_rate
 
     nominal = 88.0
-    # Running exactly at nominal duty -> 1.0x, and RUL in machine minutes equals
-    # the remaining cutting minutes.
+    # Running at nominal duty gives 1.0x, and RUL in machine minutes equals the
+    # remaining cutting minutes.
     assert normalise_wear_rate(88.0, nominal) == pytest.approx(1.0)
     assert project_wallclock(60.0, 88.0, nominal) == pytest.approx(60.0)
 
-    # Running hard -> wearing at 2x, so the deadline arrives twice as soon.
+    # Running hard means wearing at 2x, so the deadline arrives twice as soon.
     assert normalise_wear_rate(176.0, nominal) == pytest.approx(2.0)
     assert project_wallclock(60.0, 176.0, nominal) == pytest.approx(30.0)
 
@@ -176,17 +176,17 @@ def test_no_rul_alert_on_a_healthy_tool():
 
 def test_no_rul_alert_when_tool_wear_is_the_binding_constraint():
     """
-    Wear at 195 min is nearly spent, but the existing tool_wear threshold rule
-    already covers that. Emitting an RUL alert too would show the operator two
-    rows for one problem.
+    Wear at 195 min is nearly spent, but the tool_wear threshold rule already
+    covers that. An RUL alert as well would show two rows for one problem.
     """
     assert rul_rule(features(tool_wear=195, torque=40), "M") is None
 
 
 def test_rul_alert_fires_for_the_case_nothing_else_catches():
     """
-    150 min of wear looks healthy to a wear threshold (limit 180), but at 75 Nm
-    the ceiling is 160 min — 10 minutes left. This is the gap RUL exists to fill.
+    150 min of wear looks healthy to a wear threshold, which trips at 180, but
+    at 75 N·m the ceiling is 160 min so there are 10 minutes left. This is the
+    gap RUL exists to fill.
     """
     hit = rul_rule(features(tool_wear=150, torque=75), "M")
     assert hit is not None
@@ -204,10 +204,10 @@ def test_rul_alert_escalates_to_fault_when_life_is_gone():
 
 def test_rul_rule_reaches_the_combined_alert():
     """
-    Note the rpm: a constant-power drive at 75 Nm runs at ~900 rpm (7.1 kW). At
-    the helper's default 1550 rpm the same torque would draw 12.2 kW and trip the
-    power fault instead, masking what this test is checking. The operating point
-    has to be physically coherent, not just numerically convenient.
+    Note the rpm. A constant-power drive at 75 N·m runs at about 900 rpm, so
+    7.1 kW. At the helper's default 1550 rpm the same torque would draw 12.2 kW
+    and trip the power fault instead, hiding what this test is checking. The
+    operating point has to be physically coherent, not just convenient.
     """
     from backend.alerts import build_alert
     status, alert = build_alert(
@@ -224,9 +224,9 @@ def test_rul_rule_reaches_the_combined_alert():
 @pytest.mark.skipif(not CLEAN_CSV.exists(), reason="run scripts/clean_data.py first")
 def test_vectorised_target_matches_the_scalar_physics():
     """
-    clean_data.add_rul_target computes the training target with pandas; the API
-    computes it one row at a time. They must agree, or the model is trained
-    against a different definition than the one it is deployed beside.
+    clean_data.add_rul_target computes the training target with pandas and the
+    API computes it one row at a time. They have to agree, or the model is
+    trained against a different definition from the one it is deployed with.
     """
     pd = pytest.importorskip("pandas")
     df = pd.read_csv(CLEAN_CSV)
@@ -295,7 +295,7 @@ def test_simulator_records_carry_remaining_life(model_available):
     for _ in range(8):
         record = runner.tick()
         # Real elapsed time between ticks, so the wear-rate slope has a non-zero
-        # denominator. Timestamps are millisecond-resolution, so 15 ms is plenty.
+        # denominator. Timestamps are millisecond resolution, so 15 ms is plenty.
         time.sleep(0.015)
 
     life = record["remaining_life"]

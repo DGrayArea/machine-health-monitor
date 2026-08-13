@@ -1,53 +1,47 @@
 """
-Step 3b — Train the Remaining Useful Life regressor.
+Train the remaining useful life regressor.
 
-    Input : the same 9 features as the classifier
-    Output: remaining cutting minutes (a number, not a class) + an uncertainty band
+    In:  the same nine features as the classifier
+    Out: remaining cutting minutes, a number rather than a class, plus a band
 
-WHY THIS IS A REGRESSOR AND NOT A CLASSIFIER
-    "Is the machine healthy?" is a classification question with three answers.
-    "How long have I got?" is a regression question with a continuous answer, and
-    the difference matters operationally: a planner cannot schedule a tool change
+Why a regressor and not a classifier
+    "Is the machine healthy" is a classification question with three answers.
+    "How long have I got" is a regression question with a continuous answer, and
+    the difference matters in practice. A planner cannot schedule a tool change
     around the word "Warning", but can around "31 minutes".
 
-READ backend/rul.py FIRST for why this is model-based prognostics rather than
-the usual data-driven kind — the short version is that AI4I 2020 has no
-run-to-failure trajectories, so a learned degradation curve would be fiction.
+    Read backend/rul.py first for why this is model-based prognostics rather
+    than the usual data-driven kind. The short version is that AI4I 2020 has no
+    run-to-failure trajectories, so a learned degradation curve would be fiction.
 
-WHAT THIS MODEL HONESTLY IS — AND WHAT WE FOUND
-    The target is computed from the failure physics, so it is a deterministic
-    function of tool_wear, torque and quality tier. A Random Forest reproduces it
-    almost exactly: MAE 0.38 min, R^2 0.999. **That number is not an
-    achievement.** It proves the forest can learn a division, nothing more.
+What this model is, and what we found
+    The target comes from the failure physics, so it is a fixed function of
+    tool_wear, torque and quality tier. A Random Forest reproduces it almost
+    exactly, at MAE 0.38 min and R^2 0.999. That is not an achievement. It shows
+    the forest can learn a division and nothing else.
 
-    We trained it anyway to answer two engineering questions, and the answers are
-    what you should present — including the one that came out negative:
+    It was trained anyway to answer two questions, and both answers are worth
+    presenting, including the one that came out negative.
 
-      1. "Does the learned model beat the formula?"  NO.
-         It reproduces the formula to within half a minute and the spread across
-         its 300 trees is essentially zero, because there is no noise in the
-         target for the trees to disagree about. A model uncertainty band is only
-         meaningful when the trees actually disagree. **So production uses the
-         physics formula directly** (backend/rul.py) and treats this model as a
-         cross-check, not as the source of truth. Deleting it would cost the
-         system almost nothing — and being able to say that, with the numbers to
-         back it, is worth more than shipping it uncritically.
+      1. Does the learned model beat the formula? No.
+         It matches the formula to within half a minute, and the spread across
+         its 300 trees is near zero because there is no noise in the target for
+         them to disagree about. An uncertainty band only means something when
+         the trees actually disagree. So the system uses the physics formula in
+         backend/rul.py and keeps this model as a cross-check rather than the
+         source of truth. Deleting it would cost almost nothing.
 
-         The one place the spread IS non-zero is the boundary where the binding
-         constraint switches from tool-wear to overstrain. The script reports
-         sigma separately there, because that is the only region where the
-         learned model carries information the formula does not state explicitly.
+         The one place the spread is not zero is the boundary where the binding
+         constraint switches from tool wear to overstrain. The script reports
+         sigma separately there, since that is the only region where the model
+         carries anything the formula does not already state.
 
-      2. "What happens when the tool-wear counter fails?"  This one is genuinely
-         useful. We train a second model WITHOUT tool_wear, simulating a reset
-         counter or a dead encoder. Its error tells you exactly how much life
-         you can still infer from temperature, speed and torque alone. The answer
-         is: almost none — which is itself an important design finding, because
-         it says the tool-wear channel needs redundancy if this system is ever
-         to be trusted unattended.
-
-    A bad number honestly reported is worth more than a good number that hides
-    a dependency.
+      2. What happens when the tool-wear counter fails? This one is useful. A
+         second model is trained without tool_wear, standing in for a reset
+         counter or a dead encoder. Its error shows how much life can still be
+         inferred from temperature, speed and torque alone, and the answer is
+         almost none. That is a real design finding: the tool-wear channel needs
+         redundancy before this system could be trusted unattended.
 
 Usage:
     python scripts/train_rul_model.py
@@ -92,7 +86,7 @@ TARGET = "rul_minutes"
 
 # Rows where the tool is already past a limit carry RUL = 0. They are real, but
 # a long flat run of zeros lets a regressor look good for the wrong reason, so
-# we report scores on the live rows separately.
+# scores on the rows still in service are reported separately.
 LIVE_ONLY_NOTE = "rows with RUL > 0, i.e. tools still in service"
 
 
@@ -145,11 +139,10 @@ def predict_with_uncertainty(model, X) -> tuple[np.ndarray, np.ndarray]:
     """
     Mean and standard deviation across the individual trees.
 
-    Each tree saw a different bootstrap sample, so disagreement between them
-    measures how well the training data pins down this region of the input
-    space. This is *model* uncertainty — it does not capture sensor noise, and
-    it will not warn you about an operating point outside the training data
-    entirely. Say so rather than overselling it.
+    Each tree saw a different bootstrap sample, so how much they disagree says
+    how well the training data pins down that region of the input space. This is
+    model uncertainty only. It does not capture sensor noise, and it will not
+    warn you about an operating point outside the training data altogether.
     """
     # Trees inside a forest are fitted on the raw array, not the named frame.
     raw = X.to_numpy() if hasattr(X, "to_numpy") else X
@@ -223,12 +216,12 @@ def main() -> None:
           f"range: {df[TARGET].min():.1f}–{df[TARGET].max():.1f} min\n")
     print("=" * 66)
 
-    # --- Main model: everything we measure -------------------------------
+    # --- Main model: every channel we measure ----------------------------
     model, X_test, y_test, pred, scores = fit_and_score(
         "Full model (all sensors)", FEATURES, df
     )
 
-    # --- Fallback model: what if the tool-wear counter is unreliable? -----
+    # --- Fallback: what if the tool-wear counter cannot be trusted? -------
     no_wear = [f for f in FEATURES if f not in ("tool_wear", "strain")]
     _, _, _, _, fallback_scores = fit_and_score(
         "Fallback model (no tool_wear, no strain)", no_wear, df
@@ -248,7 +241,7 @@ def main() -> None:
     ))
 
     # Split sigma by which constraint binds. The trees only disagree near the
-    # switch-over, so a single median sigma hides the one interesting region.
+    # switch-over, so one overall median hides the interesting region.
     test_rows = df.loc[X_test.index]
     overstrain_bound = (test_rows["rul_binding"] == "overstrain").to_numpy()
 

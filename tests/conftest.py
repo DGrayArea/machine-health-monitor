@@ -1,9 +1,9 @@
 """
 Shared pytest fixtures.
 
-The important thing here: tests must NEVER write to the real audit database.
-We repoint config.DB_PATH and config.AUDIT_LOG_PATH at a temp directory before
-anything imports them, so a test run cannot pollute the evidence trail that the
+The important part: tests must never write to the real audit database.
+config.DB_PATH and config.AUDIT_LOG_PATH are repointed at a temp directory
+before anything imports them, so a test run cannot pollute the record the
 dashboard shows.
 """
 
@@ -22,7 +22,7 @@ from backend import config  # noqa: E402
 
 @pytest.fixture(autouse=True)
 def isolated_storage(tmp_path, monkeypatch):
-    """Every test gets its own empty database and audit log."""
+    """Each test gets its own empty database and audit log."""
     monkeypatch.setattr(config, "DB_PATH", tmp_path / "test.db")
     monkeypatch.setattr(config, "AUDIT_LOG_PATH", tmp_path / "audit.jsonl")
     monkeypatch.setattr(config, "EXPORTS_DIR", tmp_path / "exports")
@@ -44,7 +44,7 @@ def model_available() -> bool:
 
 @pytest.fixture
 def client(monkeypatch):
-    """FastAPI test client with the background simulator disabled."""
+    """A FastAPI test client with the background simulator turned off."""
     monkeypatch.setattr(config, "SIM_AUTOSTART", False)
     from fastapi.testclient import TestClient
     from backend.main import app
@@ -64,7 +64,7 @@ def auth_headers(client) -> dict:
 
 @pytest.fixture
 def normal_reading() -> dict:
-    """A healthy operating point: ~6.9 kW, 10 K delta-T, fresh tool."""
+    """A healthy operating point: about 6.9 kW, 10 K delta-T, a fresh tool."""
     return {
         "air_temp": 298.1,
         "process_temp": 308.6,

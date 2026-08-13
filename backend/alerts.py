@@ -1,33 +1,32 @@
 """
-Step 5 — Turn a prediction into an actionable alert.
+Turning a prediction into an alert someone can act on.
 
-THE CORE DESIGN DECISION IN THIS FILE
-    An alert is NOT just "whatever the model said". It combines two independent
-    sources of evidence:
+How the model and the rules combine
+    An alert is not just whatever the model said. It draws on two independent
+    sources:
 
-      (a) the ML model      — learned, probabilistic, can spot combinations
-                              of readings that no single threshold catches
-      (b) the physical rules — deterministic, from backend/thresholds.py
+      the model    learned and probabilistic, can spot combinations of readings
+                   that no single threshold covers
+      the rules    deterministic limits, from backend/thresholds.py
 
-    The combination rule is: **the rules can escalate the model, but the model
-    can never suppress the rules.** Effective severity = the worst of the two.
+    The combination rule: the thresholds can escalate the model, but the model
+    can never overrule a threshold. Effective severity is the worse of the two.
 
-    Why: a hard physical limit (power above 9 kW, tool past its life) is a fact,
-    not a prediction. If the model has a bad day and says "Normal" while the
-    spindle is drawing 9.5 kW, the operator must still be told. Machine safety
-    interlocks work the same way — the learned layer can add sensitivity, but it
-    is never allowed to override a hard limit. This is the single most important
-    thing to be able to explain about this project.
+    The reasoning is that a hard limit, such as power above 9 kW or a tool past
+    its life, is a fact rather than a prediction. If the model has a bad moment
+    and says "Normal" while the spindle draws 9.5 kW, the operator still needs
+    telling. Safety interlocks work the same way: a learned layer can add
+    sensitivity but never gets to switch off a hard limit.
 
-    The reverse direction is allowed and useful: if every threshold is inside
-    limits but the model has learned that *this particular combination* of
-    readings precedes failures, it raises a Warning on its own. That is the
-    genuinely predictive part — thresholds alone cannot do it.
+    The other direction is allowed and is where the real prediction happens. If
+    every threshold is inside limits but the model has learned that this
+    particular combination of readings tends to come before failures, it raises
+    a Warning by itself. Thresholds cannot do that.
 
-SEVERITY LADDER
-    Normal  -> Info      no alert raised, nothing logged as an alert
-    Warning -> Warning   plan a fix; the machine keeps running
-    Fault   -> Critical  act now; the machine should stop
+Severity
+    Normal  -> no alert, nothing logged
+    Warning -> plan a fix, the machine keeps running
+    Fault   -> Critical, act now, the machine should stop
 """
 
 from __future__ import annotations
@@ -43,8 +42,8 @@ SEVERITY_BY_STATUS = {"Normal": "Info", "Warning": "Warning", "Fault": "Critical
 # Ranking used to take "the worst of" two opinions.
 _RANK = {"Normal": 0, "Warning": 1, "Fault": 2}
 
-# Fallback advice when the model raises a status but no hard threshold tripped —
-# i.e. the genuinely predictive case, where there is no single limit to point at.
+# Advice used when the model raises a status but no threshold tripped, so there
+# is no single limit to point the operator at.
 MODEL_ONLY_ACTION = {
     "Warning": (
         "No single limit has been crossed, but this combination of readings "
@@ -61,7 +60,7 @@ MODEL_ONLY_ACTION = {
 
 def combined_status(model_status: str, hits: list[RuleHit]) -> str:
     """
-    Worst-of the model status and the tripped physical rules.
+    The worse of the model status and any tripped rules.
 
     >>> combined_status("Normal", [])
     'Normal'
@@ -81,18 +80,18 @@ def build_alert(
     product_type: str = "M",
 ) -> tuple[str, dict | None]:
     """
-    Decide the effective status and build the alert payload.
+    Work out the effective status and build the alert.
 
-    Returns (effective_status, alert_dict_or_None).
-    `None` means the machine is healthy and nothing needs to be logged.
+    Returns (effective_status, alert dict or None). None means the machine is
+    healthy and there is nothing to log.
     """
     hits = evaluate_rules(features, product_type=product_type)
 
-    # The RUL rule lives outside evaluate_rules on purpose. evaluate_rules holds
-    # exactly the four rules the dataset's own physics defines, and
-    # tests/test_thresholds.py checks it row-for-row against the offline
-    # labeller. RUL is a derived, forward-looking rule layered on top, so it is
-    # appended here rather than smuggled into that checked set.
+    # The RUL rule sits outside evaluate_rules on purpose. evaluate_rules holds
+    # exactly the four rules the dataset's physics defines, and
+    # tests/test_thresholds.py checks those row by row against the offline
+    # labeller. RUL is a forward-looking rule layered on top, so it is added here
+    # rather than mixed into that checked set.
     lifetime_hit = rul_rule(features, product_type=product_type)
     if lifetime_hit is not None:
         hits = hits + [lifetime_hit]
@@ -106,9 +105,9 @@ def build_alert(
     severity = SEVERITY_BY_STATUS[effective]
     rule_dicts = [asdict(h) for h in hits]
 
-    # Prefer the advice attached to the most urgent tripped rule — it names the
-    # actual physical component. Only fall back to generic advice when the model
-    # is raising this on its own.
+    # Prefer the advice from the most urgent tripped rule, since it names the
+    # actual component. Fall back to general advice only when the model is
+    # raising this on its own.
     urgent = [h for h in hits if h.severity == effective] or hits
     if urgent:
         primary = urgent[0]
@@ -120,8 +119,8 @@ def build_alert(
         action = MODEL_ONLY_ACTION[effective]
         detail = "all individual sensor limits within range"
 
-    # If several rules tripped, tell the operator so they do not fix one thing
-    # and declare victory.
+    # If several rules tripped, say so, otherwise someone fixes one thing and
+    # assumes they are done.
     extra = ""
     if len(hits) > 1:
         others = ", ".join(h.title for h in hits[1:])

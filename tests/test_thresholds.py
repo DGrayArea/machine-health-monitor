@@ -1,14 +1,14 @@
 """
-Consistency test: the OFFLINE labeller and the ONLINE alerter must agree.
+Consistency check: the offline labeller and the live alerter have to agree.
 
-scripts/clean_data.py evaluates the threshold rules with vectorised pandas (fast,
-10,000 rows at once). backend/thresholds.py evaluates them one reading at a time
-(what the live API uses). They share the same constants, but they are separate
-code paths — and separate code paths drift.
+scripts/clean_data.py evaluates the threshold rules with vectorised pandas,
+doing all 10,000 rows at once. backend/thresholds.py evaluates them one reading
+at a time, which is what the live API uses. They share the same constants but
+they are separate code paths, and separate code paths drift.
 
-If they ever disagree, the model would be trained to recognise one definition of
-"Warning" and deployed to explain a different one. That is a silent, extremely
-hard-to-debug failure, so it gets its own test running over the whole dataset.
+If they ever disagreed, the model would be trained on one definition of
+"Warning" and deployed to explain a different one. That kind of failure is
+silent and horrible to debug, so it gets its own test across the whole dataset.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from backend.thresholds import derive_features, evaluate_rules
 ROOT = Path(__file__).resolve().parent.parent
 CLEAN_CSV = ROOT / "data" / "processed" / "machine_health.csv"
 
-# clean_data.py column  ->  rule_ids that backend/thresholds.py can emit for it
+# clean_data.py column, and the rule_ids backend/thresholds.py can emit for it
 RULE_GROUPS = {
     "warn_cooling": {"cooling"},
     "warn_power": {"power_high", "power_low"},
@@ -65,7 +65,7 @@ def test_offline_and_online_rules_flag_the_same_rows():
 @pytest.mark.skipif(not CLEAN_CSV.exists(),
                     reason="run scripts/clean_data.py first")
 def test_every_labelled_warning_row_has_at_least_one_rule_hit():
-    """A row cannot be labelled Warning without a reason we can show the operator."""
+    """A row cannot be labelled Warning without a reason to show the operator."""
     pd = pytest.importorskip("pandas")
     df = pd.read_csv(CLEAN_CSV)
     warnings = df[df["health_status"] == "Warning"]

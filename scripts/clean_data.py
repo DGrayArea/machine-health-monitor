@@ -1,54 +1,55 @@
 """
-Step 2 — Clean the raw data and turn it into Normal / Warning / Fault labels.
+Clean the raw data and turn it into Normal / Warning / Fault labels.
 
-WHAT THIS SCRIPT DOES, IN ORDER
-    1. Load the raw CSV and rename columns to machine-friendly names.
+What this does, in order
+    1. Load the raw CSV and rename the columns to snake_case.
     2. Drop rows that are exact duplicates of another row.
-    3. Handle missing values (numeric -> median, categorical -> mode).
-    4. Drop physically impossible readings (negative rpm, absolute zero, ...).
-    5. Derive three engineered features that the failure physics depends on:
+    3. Fill missing values: numeric with the median, categorical with the mode.
+    4. Drop physically impossible readings, such as negative rpm.
+    5. Derive the three features the failure physics is written in:
          temp_diff  = process_temp - air_temp      [K]
          power      = torque * angular velocity    [W]
-         strain     = tool_wear * torque           [min*Nm]
-    6. Label every row Normal / Warning / Fault using threshold rules.
-    7. Write data/processed/machine_health.csv + a cleaning report.
+         strain     = tool_wear * torque           [min*N*m]
+    6. Label every row Normal, Warning or Fault from the threshold rules.
+    7. Write data/processed/machine_health.csv and a cleaning report.
 
-THE LABELLING LOGIC — THIS IS THE PART YOU NEED TO BE ABLE TO DEFEND
-    The AI4I 2020 dataset was generated from five documented physical failure
-    modes. We do not invent thresholds; we reuse the ones the machine physics
-    actually uses, and then define a Warning band *just before* each one:
+How the labels are decided
+    AI4I 2020 was generated from five documented failure modes. The thresholds
+    are not invented here, they are the ones the machine physics uses, with a
+    Warning band placed just before each:
 
-      Failure mode           FAULT condition (dataset ground truth)
+      Failure mode           Fault condition
       ---------------------  --------------------------------------------------
       HDF heat dissipation   temp_diff < 8.6 K  AND  rot_speed < 1380 rpm
       PWF power              power < 3500 W  OR  power > 9000 W
-      OSF overstrain         strain > 11000 / 12000 / 13000 (quality L / M / H)
-      TWF tool wear          tool_wear in 200..240 min (tool breaks in this band)
+      OSF overstrain         strain > 11000 / 12000 / 13000 for L / M / H
+      TWF tool wear          tool_wear in 200..240 min
       RNF random             0.1% chance, unrelated to any sensor
 
-    So a WARNING is "you are inside the last N% of margin before that limit":
+    A Warning means the machine is inside the last of its margin before one of
+    those limits:
 
-      Warning trigger              Rationale
+      Warning trigger              Why
       ---------------------------  ------------------------------------------
       temp_diff < 9.5 K            Cooling is degrading but has not failed.
-        AND rot_speed < 1500 rpm   Low rpm means less forced convection.
+        AND rot_speed < 1500 rpm   Low rpm means less air moving over it.
       power < 4000 or > 8500 W     Drivetrain is near the edge of its envelope.
-      strain > 0.85 * OSF limit    Tool + torque combination is overloading.
-      tool_wear > 180 min          Tool is inside the last 10% of its life.
+      strain > 0.85 * OSF limit    The wear and torque combination is too high.
+      tool_wear > 180 min          The tool is in the last 10% of its life.
 
-    Precedence: Fault beats Warning beats Normal. A row is a Fault if the
-    dataset's own `machine_failure` flag is set — we trust the ground truth for
-    the positive class rather than re-deriving it, because RNF failures are not
-    predictable from the sensors at all.
+    Fault beats Warning beats Normal. A row is a Fault if the dataset's own
+    machine_failure flag is set. We trust ground truth for that class rather
+    than re-deriving it, because RNF failures cannot be predicted from the
+    sensors at all.
 
-HONEST CAVEAT (say this out loud in your defence)
-    The Warning class is *deterministic* given the sensors — we computed it from
-    them. A model will therefore learn the Warning boundary almost perfectly.
-    That is not cheating, it is **rule distillation**: the value is that the same
-    model also learns the Fault class, which is NOT a pure function of the
-    sensors (it contains randomness and a stochastic tool-wear breaking point).
-    Fault recall is the number that actually measures learning. See
-    scripts/evaluate_model.py, which reports it separately.
+One caveat to be upfront about
+    The Warning label is worked out from the sensors, so it is a fixed function
+    of them and a model will learn that boundary almost perfectly. That is not
+    cheating, but it does flatter the headline accuracy. The Fault class is the
+    interesting one: it is not a clean function of the sensors, since it holds a
+    random component and a tool that breaks at an unpredictable point. Fault
+    recall is the number that shows whether anything was learned, and
+    scripts/evaluate_model.py reports it on its own.
 
 Usage:
     python scripts/clean_data.py
@@ -68,9 +69,9 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))  # so `backend` is importable when run as a script
 
-# SINGLE SOURCE OF TRUTH for every threshold. The live API imports the exact
-# same numbers from the exact same module, so the labels we train on and the
-# alerts we raise in production can never disagree. See backend/thresholds.py.
+# Every threshold is defined once, in backend/thresholds.py. The live API
+# imports the same numbers from the same module, so the labels we train on and
+# the alerts raised in production cannot disagree.
 from backend.thresholds import (  # noqa: E402
     HDF_SPEED_RPM,
     HDF_TEMP_DIFF_K,
@@ -119,18 +120,18 @@ FAILURE_FLAGS = ["twf", "hdf", "pwf", "osf", "rnf"]
 # --------------------------------------------------------------------------
 
 def load_raw(path: Path) -> pd.DataFrame:
-    """Read the CSV. `utf-8-sig` strips the byte-order mark on the UDI column."""
+    """Read the CSV. utf-8-sig strips the byte-order mark on the UDI column."""
     df = pd.read_csv(path, encoding="utf-8-sig")
     return df.rename(columns=RENAME)
 
 
 def drop_duplicates(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
     """
-    Remove exact duplicate *measurements*.
+    Remove duplicate measurements.
 
-    We ignore `udi` and `product_id` when comparing, because those are just row
-    counters — two identical sensor readings logged under different IDs are
-    still the same measurement and would double-weight the model.
+    udi and product_id are ignored when comparing, because they are just row
+    counters. Two identical sensor readings logged under different IDs are still
+    one measurement, and keeping both would double its weight in training.
     """
     subset = [c for c in df.columns if c not in ("udi", "product_id")]
     before = len(df)
@@ -140,13 +141,14 @@ def drop_duplicates(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
 
 def handle_missing(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     """
-    Fill gaps rather than dropping rows, because sensor dropouts are common in
-    the field and throwing away the whole row loses the other four channels.
+    Fill gaps rather than dropping rows. Sensor dropouts are common in the field,
+    and throwing away the whole row loses the other four channels with it.
 
-      numeric      -> median  (robust to the outliers we care about detecting)
-      categorical  -> mode    (product quality tier is stable per machine)
+      numeric      -> median, which is not dragged by the outliers we are
+                      trying to detect
+      categorical  -> mode, since the quality tier is stable per machine
 
-    Rows missing the *label* column cannot be imputed, so those are dropped.
+    Rows missing the label cannot be filled in, so those are dropped.
     """
     report: dict = {"imputed": {}, "dropped_missing_label": 0}
 
@@ -176,7 +178,7 @@ def handle_missing(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
 
 
 def drop_implausible(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
-    """Drop readings that violate physics — those are sensor faults, not machine faults."""
+    """Drop readings that break physics. Those are sensor faults, not machine faults."""
     keep = pd.Series(True, index=df.index)
     for col, (lo, hi) in PLAUSIBLE.items():
         if col in df:
@@ -188,12 +190,11 @@ def drop_implausible(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
 def add_engineered_features(df: pd.DataFrame) -> pd.DataFrame:
     """
     Three derived channels. Every documented failure mode is a function of one
-    of these, so giving them to the model directly saves it from having to
-    rediscover multiplication.
+    of these, so handing them to the model saves it rediscovering multiplication.
 
-      temp_diff : how much heat the process is failing to shed          [K]
-      power     : torque * omega, with omega = rpm * 2*pi / 60          [W]
-      strain    : cumulative mechanical load on the tool           [min*Nm]
+      temp_diff : how much heat the process is failing to shed        [K]
+      power     : torque * omega, with omega = rpm * 2*pi / 60        [W]
+      strain    : cumulative mechanical load on the tool         [min*N*m]
     """
     df = df.copy()
     df["temp_diff"] = df["process_temp"] - df["air_temp"]
@@ -206,8 +207,8 @@ def add_engineered_features(df: pd.DataFrame) -> pd.DataFrame:
 
 def warning_reasons(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Boolean column per warning rule. Kept separate from the label so the backend
-    can tell an operator *which* rule tripped, not just that something did.
+    One boolean column per warning rule. Kept separate from the label so the
+    backend can tell an operator which rule tripped, not just that one did.
     """
     return pd.DataFrame({
         "warn_cooling": (df["temp_diff"] < WARN_TEMP_DIFF_K)
@@ -221,25 +222,25 @@ def warning_reasons(df: pd.DataFrame) -> pd.DataFrame:
 
 def add_rul_target(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Remaining Useful Life, in cutting minutes until the first binding limit.
+    Remaining useful life, in cutting minutes until the first binding limit.
 
     This is the regression target for scripts/train_rul_model.py. It mirrors
-    backend/rul.physics_rul exactly — vectorised here for 10,000 rows at once —
-    and tests/test_rul.py asserts the two implementations agree row by row.
+    backend/rul.physics_rul, vectorised here to do 10,000 rows at once, and
+    tests/test_rul.py checks the two agree row by row.
 
       wear-limited   : 200 - tool_wear
       strain-limited : (osf_limit / torque) - tool_wear
       RUL            : max(0, min(the two))
 
-    See backend/rul.py for why cutting harder LOWERS the ceiling rather than
-    just consuming it faster.
+    backend/rul.py explains why cutting harder lowers the ceiling rather than
+    just using it up faster.
     """
     df = df.copy()
 
     wear_limited = TWF_WEAR_MIN_MIN - df["tool_wear"]
 
-    # Guard the division: torque of 0 means nothing is being cut, so the
-    # overstrain limit is unreachable (represented as +inf).
+    # Guard the division. Torque of 0 means nothing is being cut, so the
+    # overstrain limit is unreachable, represented as +inf.
     safe_torque = df["torque"].where(df["torque"] > 1e-6, np.nan)
     strain_limited = (df["osf_limit"] / safe_torque) - df["tool_wear"]
     strain_limited = strain_limited.fillna(np.inf)
@@ -254,7 +255,7 @@ def label_health(df: pd.DataFrame) -> pd.DataFrame:
     """
     Assign the three-class target.
 
-      Fault   : the dataset's ground-truth failure flag is set.
+      Fault   : the dataset's failure flag is set.
       Warning : no failure yet, but at least one warning rule tripped.
       Normal  : everything inside limits.
     """
@@ -274,7 +275,7 @@ def label_health(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def clean(raw_path: Path) -> tuple[pd.DataFrame, dict]:
-    """Run the whole pipeline and return (clean dataframe, report dict)."""
+    """Run the whole pipeline and return the clean dataframe and a report."""
     report: dict = {"source": str(raw_path)}
 
     df = load_raw(raw_path)
@@ -293,9 +294,9 @@ def clean(raw_path: Path) -> tuple[pd.DataFrame, dict]:
     df = add_rul_target(df)
     df = label_health(df)
 
-    # Sanity check: rows flagged as a failure with no failure mode set are
-    # unexplainable (a known quirk of the raw file). Report them, keep them —
-    # they are genuine failures, the mode just was not recorded.
+    # Rows flagged as a failure with no failure mode set cannot be explained.
+    # This is a known quirk of the raw file. Report them but keep them: they are
+    # real failures, the mode just was not recorded.
     unexplained = int(
         ((df["machine_failure"] == 1) & (df[FAILURE_FLAGS].sum(axis=1) == 0)).sum()
     )

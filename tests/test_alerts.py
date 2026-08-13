@@ -1,10 +1,9 @@
 """
-Unit tests for the alert logic (backend/alerts.py + backend/thresholds.py).
+Tests for the alert logic in backend/alerts.py and backend/thresholds.py.
 
-These tests do NOT load the model. They pin down the deterministic half of the
-system: given a reading, which physical rules trip, what severity results, and
-what the operator is told to do. That half must be correct regardless of how
-the model behaves.
+These do not load the model. They cover the deterministic half of the system:
+given a reading, which rules trip, what severity comes out, and what the
+operator is told to do. That half has to be right whatever the model does.
 """
 
 from __future__ import annotations
@@ -16,7 +15,7 @@ from backend.thresholds import derive_features, evaluate_rules, is_plausible
 
 
 def features(**overrides):
-    """A healthy baseline reading, with named channels overridden per test."""
+    """A healthy baseline reading, with channels overridden per test."""
     base = dict(air_temp=298.0, process_temp=308.0, rot_speed=1550,
                 torque=42.0, tool_wear=0.0, product_type="M")
     base.update(overrides)
@@ -56,7 +55,7 @@ def test_healthy_reading_raises_no_rules_and_no_alert():
 # ---------------------------------------------------------------- each rule
 
 def test_heat_dissipation_fault_needs_both_conditions():
-    # Low delta-T alone is not a fault — the spindle is still spinning fast
+    # Low delta-T on its own is not a fault, because the spindle is still fast
     # enough to cool itself. This is the AND in the physics.
     hits = evaluate_rules(features(process_temp=306.0, rot_speed=2000))
     assert not any(h.rule_id == "cooling" and h.severity == "Fault" for h in hits)
@@ -69,8 +68,8 @@ def test_heat_dissipation_fault_needs_both_conditions():
 
 
 def test_cooling_warning_fires_before_the_fault_limit():
-    # delta-T of 9.0 K is above the 8.6 K fault line but below the 9.5 K warning
-    # line — this is exactly the margin predictive maintenance exists to catch.
+    # A delta-T of 9.0 K is above the 8.6 K fault line but below the 9.5 K
+    # warning line, which is the margin predictive maintenance exists to catch.
     hits = evaluate_rules(features(process_temp=307.0, rot_speed=1400))
     cooling = [h for h in hits if h.rule_id == "cooling"]
     assert cooling and cooling[0].severity == "Warning"
@@ -120,7 +119,7 @@ def test_faults_are_sorted_before_warnings():
 # ---------------------------------------------------------- combination rule
 
 def test_rules_escalate_the_model():
-    """The safety-critical case: model says Normal, physics says otherwise."""
+    """The safety case: the model says Normal and the physics disagrees."""
     assert combined_status("Normal", evaluate_rules(features(torque=75,
                                                              rot_speed=1400))) == "Fault"
 
@@ -134,7 +133,7 @@ def test_rules_escalate_the_model():
 
 
 def test_model_can_never_suppress_a_tripped_rule():
-    """A confident 'Normal' must not silence a hard physical limit."""
+    """A confident "Normal" must not silence a hard limit."""
     f = features(tool_wear=250)                     # past end of tool life
     status, alert = build_alert(model_status="Normal", confidence=1.0, features=f)
     assert status == "Fault"
@@ -143,9 +142,9 @@ def test_model_can_never_suppress_a_tripped_rule():
 
 def test_model_alone_can_raise_a_warning():
     """
-    The genuinely predictive case: every threshold is inside limits, but the
-    model recognises the pattern. There is no rule to quote, so we fall back to
-    generic advice — and we must still produce an alert.
+    The predictive case: every threshold is inside limits but the model
+    recognises the pattern. There is no rule to quote, so the advice falls back
+    to something general, and an alert must still be raised.
     """
     status, alert = build_alert(model_status="Warning", confidence=0.71,
                                 features=features())
@@ -156,7 +155,7 @@ def test_model_alone_can_raise_a_warning():
 
 
 def test_alert_message_names_secondary_conditions():
-    """If several things are wrong, the operator must be told about all of them."""
+    """If several things are wrong, the operator has to hear about all of them."""
     _, alert = build_alert(
         model_status="Fault", confidence=0.88,
         features=features(tool_wear=190, torque=75, rot_speed=1400),
@@ -175,7 +174,7 @@ def test_severity_ladder(model_status, expected_severity):
 
 
 def test_every_alert_carries_an_actionable_instruction():
-    """No alert may ever be raised without telling someone what to do."""
+    """No alert should be raised without telling someone what to do."""
     scenarios = [
         features(process_temp=306.0, rot_speed=1200),   # cooling fault
         features(torque=75, rot_speed=1400),            # power overload

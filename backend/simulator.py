@@ -1,41 +1,43 @@
 """
-Step 7 — The live sensor simulator, so the system can be demoed with no hardware.
+The live sensor simulator, so the system can be demoed without hardware.
 
-WHY NOT JUST RANDOM NUMBERS
-    Independent random values would never produce a realistic fault, because
-    real machine faults come from *coupling* between channels. This simulator
-    reproduces the couplings that actually exist on a spindle:
+Why not just random numbers
+    Independent random values would never produce a believable fault, because
+    real faults come from channels affecting each other. This simulator
+    reproduces the couplings that exist on a real spindle.
 
-    1. CONSTANT-POWER DRIVE
-         The controller holds cutting power roughly constant, so
-             P = torque * omega   =>   rpm = P / torque * 60/(2*pi)
-         A heavier cut (more torque) therefore SLOWS the spindle. That single
-         relationship is why `power` is a better feature than torque or rpm
-         alone, and the simulator obeys it rather than faking it.
+    1. Constant-power drive
+       The controller holds cutting power roughly constant, so
+           P = torque * omega   =>   rpm = P / torque * 60/(2*pi)
+       A heavier cut therefore slows the spindle down. That relationship is why
+       `power` is a better feature than torque or rpm alone, and the simulator
+       follows it rather than faking it.
 
-    2. TOOL WEAR RAISES TORQUE
-         A blunt tool needs more force for the same cut. Torque climbs with
-         wear, which (via #1) drags rpm down and pushes strain = wear x torque
-         toward the overstrain limit. This is the degradation ramp that makes
-         the dashboard walk Normal -> Warning -> Fault on its own.
+    2. Wear raises torque
+       A blunt tool needs more force for the same cut, so torque climbs with
+       wear, which through the first coupling drags rpm down and pushes
+       strain = wear x torque towards the overstrain limit. That is the
+       degradation ramp that walks the dashboard from Normal to Warning to Fault
+       without anyone touching it.
 
-    3. LOW RPM MEANS WORSE COOLING
-         Less airflow over the spindle, so the process-to-air temperature
-         difference shrinks — which is exactly the heat-dissipation failure
-         condition. Faults therefore arrive as a *cascade*, the way they do on
-         a real machine, instead of one isolated channel going out of range.
+    3. Low rpm means worse cooling
+       Less airflow over the spindle, so the process-to-air temperature
+       difference shrinks, which is the heat-dissipation failure condition.
+       Faults therefore arrive as a cascade the way they do on a real machine,
+       rather than one isolated channel drifting out of range.
 
-    4. MAINTENANCE RESETS THE CYCLE
-         After a fault the tool is changed: wear -> 0, torque recovers, the
-         machine returns to Normal. So a long demo shows repeated life cycles.
+    4. Maintenance resets the cycle
+       After a fault the tool is changed, wear goes back to zero, torque
+       recovers and the machine returns to Normal, so a long demo shows
+       repeated tool lives.
 
-    The point of all this: the model was trained on data with these physics in
-    it, so the simulator must have them too. A simulator that violated them
-    would be testing the model on a distribution it never saw.
+    The reason this matters: the model was trained on data with these physics in
+    it. A simulator that ignored them would be testing the model on a
+    distribution it has never seen.
 
-DEMO CONTROL
-    `inject(scenario)` forces a specific failure mode on demand, so you can
-    trigger a red dashboard during a presentation instead of waiting for one.
+Demo control
+    inject(scenario) forces a specific failure mode on demand, so you can turn
+    the dashboard red during a presentation instead of waiting for it.
 """
 
 from __future__ import annotations
@@ -60,7 +62,7 @@ TOOL_CHANGE_WEAR_MIN = 235.0     # tool is swapped at this wear
 
 
 class MachineSimulator:
-    """A single virtual milling machine with a tool-life cycle."""
+    """One virtual milling machine, with a tool-life cycle."""
 
     def __init__(self, seed: int | None = None) -> None:
         self.rng = random.Random(seed)
@@ -79,7 +81,7 @@ class MachineSimulator:
     # -- internal helpers -------------------------------------------------
 
     def _drift(self, value: float, target: float, rate: float, noise: float) -> float:
-        """Pull a value gently toward a target, plus Gaussian sensor noise."""
+        """Ease a value towards a target, plus Gaussian sensor noise."""
         return value + (target - value) * rate + self.rng.gauss(0, noise)
 
     def _maybe_change_state(self) -> None:
@@ -95,7 +97,7 @@ class MachineSimulator:
                 self.state, self.state_ticks = "overload", 0
 
         elif self.state in ("cooling_fault", "overload"):
-            # Episodes are self-limiting: an operator notices and corrects.
+            # Episodes end on their own, as an operator would notice and correct.
             if self.state_ticks > self.rng.randint(12, 30):
                 self.state, self.state_ticks = "running", 0
 
@@ -124,20 +126,20 @@ class MachineSimulator:
             self.air_temp = self._drift(self.air_temp, NOMINAL_AIR_TEMP_K, 0.10, 0.05)
             self.temp_diff = self._drift(self.temp_diff, NOMINAL_TEMP_DIFF_K, 0.15, 0.08)
         else:
-            # --- ambient drifts slowly, like a real shop floor ---
+            # --- ambient drifts slowly, the way a shop floor does ---
             self.air_temp = self._drift(self.air_temp, NOMINAL_AIR_TEMP_K, 0.02, 0.09)
 
-            # --- tool wears; a blunt tool demands more torque (coupling #2) ---
+            # --- the tool wears, and a blunt tool needs more torque ---
             #
-            # Wear does NOT accrue at a fixed rate. Taylor's tool life equation
-            # (V·T^n = C) says life falls sharply as cutting load rises, so we
-            # scale the wear increment by how hard the machine is working
-            # relative to its nominal duty. The exponent 1.5 is a simplification
-            # of that relationship, clipped so a single extreme tick cannot
-            # destroy the tool instantly.
+            # Wear does not build up at a fixed rate. Taylor's tool life
+            # equation (V*T^n = C) says life falls sharply as cutting load
+            # rises, so the wear increment is scaled by how hard the machine is
+            # working against its nominal duty. The exponent 1.5 is a
+            # simplification of that, clipped so one extreme tick cannot destroy
+            # the tool outright.
             #
-            # This is what makes the wall-clock RUL projection meaningful: a
-            # machine running hard burns its life faster than the clock, so the
+            # This is what makes the clock-time RUL projection worth showing. A
+            # machine running hard loses life faster than the clock, so the
             # measured wear rate rises and the projected deadline pulls in.
             severity = (self.target_power / NOMINAL_POWER_W) ** 1.5
             severity = max(0.5, min(3.0, severity))
@@ -156,11 +158,11 @@ class MachineSimulator:
                 NOMINAL_TORQUE_NM * wear_torque_penalty + self.rng.gauss(0, 2.2),
             )
 
-            # --- constant-power drive sets the speed (coupling #1) ---
+            # --- the constant-power drive sets the speed ---
             omega = self.target_power / torque              # rad/s
             rot_speed = max(150.0, omega * 60.0 / (2 * math.pi) + self.rng.gauss(0, 25))
 
-            # --- cooling depends on airflow, i.e. on rpm (coupling #3) ---
+            # --- cooling depends on airflow, so on rpm ---
             if self.state == "cooling_fault":
                 cooling_target = 7.6                        # below the 8.6 K limit
             else:
@@ -178,7 +180,7 @@ class MachineSimulator:
         }
 
     def inject(self, scenario: str) -> str:
-        """Force a condition on demand — used for live demos."""
+        """Force a condition on demand, for live demos."""
         if scenario == "overheat":
             self.state, self.state_ticks = "cooling_fault", 0
             self.temp_diff = 8.0
@@ -202,12 +204,12 @@ class MachineSimulator:
 
 class SimulationRunner:
     """
-    Runs the simulator on a background thread: step -> predict -> alert -> log.
+    Runs the simulator on a background thread: step, predict, alert, log.
 
-    A daemon thread (not asyncio) keeps this independent of the web server's
-    event loop, so a slow prediction can never stall an HTTP request. The ring
-    buffer is a `deque(maxlen=N)`, which discards the oldest reading
-    automatically — memory stays flat no matter how long the demo runs.
+    A daemon thread rather than asyncio keeps this off the web server's event
+    loop, so a slow prediction cannot stall an HTTP request. The buffer is a
+    deque with a maxlen, which drops the oldest reading on its own, so memory
+    stays flat however long the demo runs.
     """
 
     def __init__(self, interval: float | None = None, buffer_size: int | None = None):
@@ -227,19 +229,19 @@ class SimulationRunner:
     @property
     def nominal_wear_rate(self) -> float:
         """
-        Wear-minutes accrued per wall-clock minute at nominal duty.
+        Wear-minutes per wall-clock minute at nominal duty.
 
-        This is the simulator's time-compression factor: one tick of
-        `interval` seconds advances the tool by WEAR_PER_STEP_MIN cutting
-        minutes. Dividing the measured rate by this recovers a real-machine
-        figure where 1.0 means "wearing at exactly the rate of the clock".
+        This is the simulator's time-compression factor. One tick of `interval`
+        seconds advances the tool by WEAR_PER_STEP_MIN cutting minutes, so
+        dividing the measured rate by this gives a real-machine figure where 1.0
+        means wearing at exactly the rate of the clock.
         """
         return WEAR_PER_STEP_MIN / (self.interval / 60.0)
 
     def tick(self) -> dict | None:
         """
-        One full cycle. Also called directly by tests, so the pipeline can be
-        verified without starting a thread or waiting on wall-clock time.
+        One full cycle. Tests call this directly, so the pipeline can be checked
+        without starting a thread or waiting on the clock.
         """
         reading = self.machine.step()
         try:
@@ -255,10 +257,10 @@ class SimulationRunner:
             product_type=reading["product_type"],
         )
 
-        # Layer 3 of the RUL estimate: the physics gives remaining *cutting*
-        # minutes, but an operator schedules in wall-clock time. We measure the
-        # wear rate actually observed over the recent buffer rather than
-        # assuming one, so a machine running hard reports a nearer deadline.
+        # Layer 3 of the RUL estimate. The physics gives remaining cutting
+        # minutes, but an operator schedules in clock time, so we measure the
+        # wear rate actually seen over the recent buffer rather than assuming
+        # one. A machine running hard then reports a nearer deadline.
         remaining_life = dict(result["rul"])
         with self._lock:
             history = list(self.buffer)
@@ -314,12 +316,12 @@ class SimulationRunner:
         return record
 
     def _loop(self) -> None:
-        # Event.wait() instead of sleep() so stop() takes effect immediately
-        # rather than after the current interval finishes.
+        # Event.wait() rather than sleep() so stop() takes effect straight away
+        # instead of after the current interval finishes.
         while not self._stop.wait(self.interval):
             try:
                 self.tick()
-            except Exception as exc:  # noqa: BLE001 - a bad tick must not kill the thread
+            except Exception as exc:  # noqa: BLE001 - one bad tick must not kill the thread
                 self.last_error = f"{type(exc).__name__}: {exc}"
 
     def start(self) -> bool:

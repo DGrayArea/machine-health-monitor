@@ -1,6 +1,6 @@
 """
-Backend configuration. Everything here can be overridden with an env var so the
-same code runs on your laptop and on a real deployment without edits.
+Backend configuration. Every setting can be overridden with an environment
+variable, so the same code runs on a laptop and on a real deployment unchanged.
 """
 
 from __future__ import annotations
@@ -12,13 +12,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 MODEL_PATH = Path(os.getenv("MHM_MODEL_PATH", ROOT / "model" / "health_model.pkl"))
-# Optional. RUL comes from the physics formula in backend/rul.py; this regressor
-# is only a cross-check, so the API works fine without it.
+# Optional. RUL comes from the physics formula in backend/rul.py and this
+# regressor is only a cross-check, so the API works without it.
 RUL_MODEL_PATH = Path(os.getenv("MHM_RUL_MODEL_PATH", ROOT / "model" / "rul_model.pkl"))
 FRONTEND_DIR = ROOT / "frontend"
 
-# Every file the system *generates* lives under outputs/, split by kind, so that
-# nothing generated is ever mixed in with source code:
+# Everything the system generates lives under outputs/, split by kind, so that
+# nothing generated is ever mixed in with source:
 #   outputs/figures/  PNG plots from the evaluation script
 #   outputs/metrics/  JSON metrics (cleaning report, evaluation scores)
 #   outputs/logs/     runtime audit trail (SQLite DB + append-only JSONL)
@@ -33,17 +33,17 @@ DB_PATH = Path(os.getenv("MHM_DB_PATH", LOGS_DIR / "monitoring.db"))
 AUDIT_LOG_PATH = Path(os.getenv("MHM_AUDIT_LOG", LOGS_DIR / "audit_log.jsonl"))
 
 # --- Auth ---------------------------------------------------------------
-# In a real deployment MHM_SECRET_KEY must be set. If it is not, we generate a
-# random one per process: tokens then stop working when the server restarts,
-# which is inconvenient but far safer than shipping a hardcoded signing key
-# that anyone reading this repo could forge tokens with.
+# In a real deployment MHM_SECRET_KEY must be set. If it is not, a random one is
+# generated per process, so tokens stop working when the server restarts. That is
+# inconvenient but much safer than shipping a signing key that anyone reading
+# this repo could forge tokens with.
 SECRET_KEY = os.getenv("MHM_SECRET_KEY") or secrets.token_urlsafe(32)
 SECRET_KEY_IS_EPHEMERAL = "MHM_SECRET_KEY" not in os.environ
 JWT_ALGORITHM = "HS256"
 TOKEN_TTL_MINUTES = int(os.getenv("MHM_TOKEN_TTL_MIN", "480"))  # one shift
 
-# Demo credentials for the local dashboard. These are DEMO ONLY — the whole
-# user store is a dict in backend/auth.py. See the README security note.
+# Demo credentials for the local dashboard. Demo only: the whole user store is
+# a dict in backend/auth.py. See the README for the caveats.
 DEMO_USERNAME = os.getenv("MHM_DEMO_USER", "engineer")
 DEMO_PASSWORD = os.getenv("MHM_DEMO_PASSWORD", "maintenance123")
 

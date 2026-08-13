@@ -1,5 +1,5 @@
 """
-Step 9 — The API.
+The API.
 
     GET  /                          the dashboard (static HTML/JS)
     GET  /api/health                liveness + model status        [public]
@@ -14,8 +14,8 @@ Step 9 — The API.
     POST /api/simulator/inject/{s}  force a fault, for demos       [auth]
     GET  /api/report/csv|pdf        download a report              [auth]
 
-    Interactive API docs are at /docs — FastAPI generates them from the
-    Pydantic models, so they are always in sync with the code.
+    Interactive docs are at /docs. FastAPI generates them from the Pydantic
+    models, so they stay in step with the code.
 
 Run it:
     uvicorn backend.main:app --reload
@@ -45,7 +45,7 @@ from backend.simulator import runner
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup/shutdown. Everything expensive happens once, here."""
+    """Startup and shutdown. Anything expensive happens once, here."""
     for directory in (config.LOGS_DIR, config.EXPORTS_DIR):
         directory.mkdir(parents=True, exist_ok=True)
     database.init_db()
@@ -77,9 +77,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# The dashboard is served from this same origin, so CORS is not strictly needed.
-# It is enabled for localhost only so you can also run a separate frontend dev
-# server (e.g. Vite on :5173) against this API without changing anything.
+# The dashboard is served from the same origin, so CORS is not strictly needed.
+# It is enabled for localhost only, so a separate frontend dev server (Vite on
+# :5173, say) can talk to this API without any changes.
 app.add_middleware(
     CORSMiddleware,
     allow_origin_regex=r"http://(localhost|127\.0\.0\.1)(:\d+)?",
@@ -99,7 +99,7 @@ def health() -> dict:
     return {
         "status": "ok" if ready else "degraded",
         "model_loaded": ready,
-        # RUL always works (physics); this only reports the optional cross-check.
+        # RUL always works, since it is physics. This is the optional model.
         "rul_model_loaded": predictor.rul_model_available(),
         "simulator_running": runner.running,
         "readings_buffered": len(runner.buffer),
@@ -111,7 +111,7 @@ def health() -> dict:
 def login(payload: LoginRequest) -> TokenResponse:
     user = auth.authenticate(payload.username, payload.password)
     if user is None:
-        # Deliberately vague: never reveal whether the username exists.
+        # Deliberately vague, so it never reveals whether the username exists.
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED, "Incorrect username or password."
         )
@@ -145,8 +145,8 @@ def predict_endpoint(
     """
     Classify one sensor reading.
 
-    The full path: validate -> derive features -> model -> threshold rules ->
-    combine -> persist to the audit trail -> respond.
+    The path through: validate, derive features, run the model, apply the
+    threshold rules, combine them, write to the audit trail, respond.
     """
     try:
         result = predictor.predict(reading.model_dump())
@@ -190,7 +190,7 @@ def live(
     limit: int = Query(60, ge=1, le=500),
     user: dict = Depends(auth.current_user),
 ) -> LiveSnapshot:
-    """Most recent simulated readings — this is what the dashboard polls."""
+    """The most recent simulated readings. This is what the dashboard polls."""
     return LiveSnapshot(
         running=runner.running,
         interval_seconds=runner.interval,
@@ -208,7 +208,7 @@ def alerts(
     rows = database.recent_alerts(limit=limit if severity is None else 500)
     if severity:
         rows = [r for r in rows if r["severity"] == severity][:limit]
-    # triggered_rules is stored as a JSON string; decode it before validation.
+    # triggered_rules is stored as a JSON string, so decode before validating.
     rows = reporting.normalise_alert_rows(rows)
     return [AlertRecord(**{k: r[k] for k in AlertRecord.model_fields}) for r in rows]
 
@@ -240,7 +240,7 @@ def sim_stop(user: dict = Depends(auth.current_user)) -> dict:
 
 @app.post("/api/simulator/inject/{scenario}", tags=["simulator"])
 def sim_inject(scenario: str, user: dict = Depends(auth.current_user)) -> dict:
-    """Force a fault condition so a red dashboard can be demonstrated on cue."""
+    """Force a fault so the dashboard can be shown going red on cue."""
     try:
         message = runner.machine.inject(scenario)
     except ValueError as exc:
@@ -281,13 +281,13 @@ def report_pdf(
 
 
 # --------------------------------------------------------------------------
-# Frontend (mounted last so it never shadows an /api route)
+# Frontend, declared last so it cannot shadow an /api route
 # --------------------------------------------------------------------------
 
-# `no-cache` means "revalidate before reusing", NOT "never cache" — the browser
-# still gets a cheap 304 when the file is unchanged. Without it, an edit to
-# styles.css or app.js can sit invisible behind a cached copy, which looks
-# exactly like a bug in your code.
+# `no-cache` means revalidate before reusing, not never cache: the browser still
+# gets a cheap 304 when the file has not changed. Without it, an edit to
+# styles.css or app.js can sit hidden behind a cached copy, which looks exactly
+# like a bug in the code.
 STATIC_HEADERS = {"Cache-Control": "no-cache"}
 
 

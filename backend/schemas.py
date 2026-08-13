@@ -1,10 +1,11 @@
 """
-Request/response shapes.
+Request and response shapes.
 
 Pydantic validates every incoming payload before it reaches our code, so a
-malformed or out-of-range sensor reading is rejected with a clear 422 instead of
-producing a confident nonsense prediction. The `ge`/`le` bounds mirror
-backend/thresholds.PLAUSIBLE — physically impossible values are a sensor fault.
+malformed or out-of-range reading is rejected with a clear 422 rather than
+producing a confident wrong prediction. The ge/le bounds mirror
+backend/thresholds.PLAUSIBLE, since physically impossible values mean a sensor
+fault rather than a machine fault.
 """
 
 from __future__ import annotations
@@ -21,11 +22,11 @@ class SensorReading(BaseModel):
     """
     One snapshot from the machine's sensors.
 
-    UNITS: this API speaks SI — temperatures in **kelvin**, power in watts —
-    because that is what the model was trained on and what the failure
-    thresholds are quoted in. The dashboard and the downloaded reports convert
-    to °C and kW for display. See backend/units.py for why the conversion lives
-    at the edge rather than in here. To send 25 °C, post 298.15.
+    Units: this API speaks SI, so temperatures are in kelvin and power in watts.
+    That is what the model was trained on and what the failure thresholds are
+    quoted in. The dashboard and the downloaded reports convert to °C and kW for
+    display; see backend/units.py for why the conversion sits at the edge rather
+    than here. To send 25 °C, post 298.15.
     """
 
     air_temp: float = Field(..., ge=250, le=350,
@@ -70,7 +71,7 @@ class Alert(BaseModel):
 
 
 class RemainingLife(BaseModel):
-    """Remaining useful life. See backend/rul.py for the derivation."""
+    """Remaining useful life. backend/rul.py has the derivation."""
 
     remaining_min: float = Field(..., description="Cutting minutes to the first limit")
     binding_constraint: Literal["tool_wear", "overstrain"]
@@ -82,15 +83,15 @@ class RemainingLife(BaseModel):
     strain_limited_min: float | None
     band: Literal["ok", "warning", "critical"]
     source: str = "physics"
-    # Cross-check from the optional regressor; null when the model is absent.
+    # Cross-check from the optional regressor, null when it is not loaded.
     model_remaining_min: float | None = None
     model_sigma_min: float | None = None
-    # Wall-clock projection from the observed wear rate; null until enough
-    # live readings exist to measure a rate.
+    # Clock-time projection from the observed wear rate, null until there are
+    # enough live readings to measure a rate.
     wear_rate_per_min: float | None = None
     wallclock_remaining_min: float | None = None
 
-    # `model_` is Pydantic's own namespace; opt out so our field names survive.
+    # `model_` is Pydantic's own namespace, so opt out to keep these field names.
     model_config = {"protected_namespaces": ()}
 
 

@@ -1,25 +1,28 @@
 """
-Step 4 — Evaluate the saved model and produce the figures for your report.
+Evaluate the saved model and produce the figures for the write-up.
 
-It rebuilds the *same* stratified split used in training (same random_state),
-loads model/health_model.pkl, and writes four figures to reports/:
+It rebuilds the same stratified split used in training, using the same
+random_state, loads model/health_model.pkl, and writes four figures to
+outputs/figures/:
 
-    1. confusion_matrix.png   — where the model is wrong, and in which direction
-    2. actual_vs_predicted.png — actual vs predicted status over a run of rows,
-                                 i.e. what the operator would have seen live
-    3. feature_importance.png  — which sensor channels drive the decisions
-    4. confidence_distribution.png — how sure the model is when it is right vs wrong
+    confusion_matrix.png         where the model is wrong, and in which direction
+    actual_vs_predicted.png      actual against predicted over a run of rows,
+                                 which is what an operator would have seen live
+    feature_importance.png       which channels drive the decisions
+    confidence_distribution.png  how sure it is when right against when wrong
 
-HOW TO READ THE CONFUSION MATRIX (the bit examiners ask about)
-    Rows = truth, columns = prediction.
-    - The cell [Fault -> Normal] is the dangerous one: a real failure reported
-      as healthy. In maintenance that is a missed breakdown.
-    - The cell [Normal -> Fault] is merely annoying: a false alarm that costs an
-      unnecessary inspection.
-    These two errors are NOT equally bad, which is exactly why we report recall
-    on the Fault class separately instead of hiding behind overall accuracy.
-    With 96.6% of rows non-Fault, a model that predicted "Normal" forever would
-    already score 67% accuracy — accuracy alone proves nothing here.
+Reading the confusion matrix
+    Rows are truth, columns are prediction.
+
+    The cell [Fault -> Normal] is the dangerous one, a real failure reported as
+    healthy, which in maintenance means a missed breakdown. The cell
+    [Normal -> Fault] is only annoying, a false alarm costing an unnecessary
+    inspection.
+
+    Those two are not equally bad, which is why recall on the Fault class is
+    reported separately rather than folded into overall accuracy. With 96.6% of
+    rows non-Fault, a model that answered "Normal" forever would already score
+    67%, so accuracy on its own proves nothing here.
 
 Usage:
     python scripts/evaluate_model.py
@@ -49,13 +52,13 @@ ROOT = Path(__file__).resolve().parent.parent
 CLEAN_CSV = ROOT / "data" / "processed" / "machine_health.csv"
 MODEL_PATH = ROOT / "model" / "health_model.pkl"
 
-# All generated artefacts live under outputs/ — never mixed in with source.
+# Everything generated lives under outputs/, never mixed in with source.
 FIGURES = ROOT / "outputs" / "figures"
 METRICS = ROOT / "outputs" / "metrics"
 
 CLASS_ORDER = ["Normal", "Warning", "Fault"]
 COLOURS = {"Normal": "#2e9e5b", "Warning": "#e0a800", "Fault": "#d9463f"}
-RANDOM_STATE = 42  # must match train_model.py or the "test set" leaks
+RANDOM_STATE = 42  # must match train_model.py, or the test set leaks
 
 
 def load() -> tuple[dict, pd.DataFrame]:
@@ -76,7 +79,7 @@ def plot_confusion(cm: np.ndarray, path: Path) -> None:
     ax.set_ylabel("Actual status")
     ax.set_title("Confusion matrix — held-out test set")
 
-    # Annotate each cell with the count and the row-normalised percentage.
+    # Label each cell with the count and the row percentage.
     row_totals = cm.sum(axis=1, keepdims=True)
     pct = np.divide(cm, row_totals, where=row_totals != 0) * 100
     threshold = cm.max() / 2
@@ -97,8 +100,8 @@ def plot_confusion(cm: np.ndarray, path: Path) -> None:
 
 def plot_actual_vs_predicted(y_true, y_pred, path: Path, n: int = 200) -> None:
     """
-    Actual vs predicted as a step trace, the way it would appear on the live
-    dashboard. Mismatches are marked with a red X so they are countable by eye.
+    Actual against predicted as a step trace, the way it would look on the live
+    dashboard. Mismatches get a red X so they can be counted by eye.
     """
     idx = np.arange(n)
     to_num = {c: i for i, c in enumerate(CLASS_ORDER)}
@@ -146,10 +149,10 @@ def plot_feature_importance(bundle: dict, path: Path) -> None:
 
 def plot_confidence(proba: np.ndarray, y_true, y_pred, path: Path) -> None:
     """
-    Confidence = the winning class probability. A trustworthy model should be
-    noticeably less confident on the rows it gets wrong. If the two histograms
-    overlap completely, the confidence score is decorative and you should not
-    put it on the dashboard.
+    Confidence is the winning class probability. A model worth trusting should
+    be noticeably less confident on the rows it gets wrong. If the two
+    histograms overlap completely then the confidence score is decorative and
+    does not belong on the dashboard.
     """
     conf = proba.max(axis=1)
     correct = np.array(y_true) == np.array(y_pred)
@@ -160,7 +163,7 @@ def plot_confidence(proba: np.ndarray, y_true, y_pred, path: Path) -> None:
             color="#2e9e5b")
     ax.hist(conf[~correct], bins=bins, alpha=0.85,
             label=f"Incorrect (n={(~correct).sum()})", color="#d9463f")
-    ax.set_yscale("log")  # errors are rare; log scale keeps them visible
+    ax.set_yscale("log")  # errors are rare, so log scale keeps them visible
     ax.set_xlabel("Model confidence (max class probability)")
     ax.set_ylabel("Rows (log scale)")
     ax.set_title("Is the confidence score meaningful?")
@@ -179,7 +182,7 @@ def main() -> None:
     X = X[features]
     y = df["health_status"]
 
-    # Identical split to training -> these rows were never seen by the model.
+    # The same split as training, so these rows were never seen by the model.
     _, X_test, _, y_test = train_test_split(
         X, y, test_size=0.2, random_state=RANDOM_STATE, stratify=y
     )
@@ -204,7 +207,7 @@ def main() -> None:
     for i, actual in enumerate(CLASS_ORDER):
         print(f"  {actual:<10}" + "".join(f"{cm[i, j]:>10}" for j in range(len(CLASS_ORDER))))
 
-    # Spell out the two error types that matter operationally.
+    # Spell out the two errors that matter in practice.
     fi, ni = CLASS_ORDER.index("Fault"), CLASS_ORDER.index("Normal")
     missed = int(cm[fi, ni])
     false_alarm = int(cm[ni, fi])
