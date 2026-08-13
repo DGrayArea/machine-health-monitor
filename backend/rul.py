@@ -65,6 +65,7 @@ from datetime import datetime
 from typing import Any, Sequence
 
 from backend.thresholds import OSF_STRAIN_LIMIT, TWF_WEAR_MIN_MIN, RuleHit
+from backend.trends import least_squares_slope
 
 # Below this many remaining cutting minutes, tell the operator to plan a change.
 RUL_WARNING_MIN = 25.0
@@ -204,18 +205,15 @@ def estimate_wear_rate(
     if len(points) < MIN_POINTS_FOR_RATE:
         return None
 
-    # Least-squares slope of wear against time.
+    # Least-squares slope of wear against time. The fit itself lives in
+    # trends.py, since the trend rules need exactly the same maths.
     t0 = points[0][0]
     xs = [(t - t0) / 60.0 for t, _ in points]     # wall-clock minutes
     ys = [w for _, w in points]
-    n = len(xs)
-    mean_x = sum(xs) / n
-    mean_y = sum(ys) / n
-    denominator = sum((x - mean_x) ** 2 for x in xs)
-    if denominator <= 1e-12:
-        return None
 
-    slope = sum((x - mean_x) * (y - mean_y) for x, y in zip(xs, ys)) / denominator
+    slope = least_squares_slope(xs, ys)
+    if slope is None:
+        return None
     return slope if slope > 1e-6 else None
 
 

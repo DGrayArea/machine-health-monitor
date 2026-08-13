@@ -64,6 +64,13 @@ Run the tests:
 python -m pytest tests/ -v
 ```
 
+Optional, and worth running once for the write-up — it measures how much
+accuracy is lost when the sensors are imperfect:
+
+```bash
+python scripts/test_robustness.py
+```
+
 ---
 
 ## How it fits together
@@ -145,7 +152,8 @@ machine-health-monitor/
 │   ├── clean_data.py           cleaning, labelling, RUL target
 │   ├── train_model.py          Random Forest and a Logistic Regression baseline
 │   ├── evaluate_model.py       confusion matrix, plots, per-class scores
-│   └── train_rul_model.py      RUL regressor and the measurements on it
+│   ├── train_rul_model.py      RUL regressor and the measurements on it
+│   └── test_robustness.py      how the model holds up on imperfect sensors
 │
 ├── model/
 │   ├── health_model.pkl        trained classifier bundle
@@ -157,6 +165,7 @@ machine-health-monitor/
 │   ├── thresholds.py           every physical limit, defined once
 │   ├── units.py                SI to display conversion, defined once
 │   ├── rul.py                  remaining tool life and wear-rate trend
+│   ├── trends.py               projects when a channel crosses its limit
 │   ├── predictor.py            loads the models, runs inference
 │   ├── alerts.py               model plus rules to severity and action
 │   ├── simulator.py            sensor simulator with realistic coupling
@@ -173,10 +182,11 @@ machine-health-monitor/
 │   └── app.js                  polling, rendering, canvas chart
 │
 ├── tests/
-│   ├── test_alerts.py          alert and threshold logic, no model needed
+│   ├── test_alerts.py          alert logic, thresholds, repeat suppression
 │   ├── test_rul.py             RUL physics, wear trend, RUL alert rule
+│   ├── test_trends.py          trend projection and its significance test
 │   ├── test_units.py           unit conversions
-│   ├── test_api.py             endpoints, login, audit trail, reports
+│   ├── test_api.py             endpoints, login, rate limits, audit, reports
 │   └── test_thresholds.py      offline labeller vs live alerter
 │
 └── outputs/                    everything the system generates
@@ -575,6 +585,65 @@ If several rules trip at once the message names the others too, so nobody fixes
 one thing and assumes they are done. A test checks that no alert can be raised
 without an instruction attached.
 
+### The trend layer
+
+Every threshold rule looks at one reading and asks whether it is out of range.
+That is detection, not prediction. A spindle whose cooling has been degrading
+for four minutes reads perfectly normal right up until it does not.
+
+`backend/trends.py` asks the other question: fit a line through the recent
+readings, and at this rate, when does the channel cross its limit? If the answer
+is inside the horizon, say so now.
+
+Two gates keep it quiet, and both have to pass:
+
+- **The window must cover enough real time.** Twenty readings at four ticks a
+  second span five seconds, and five seconds cannot measure a per-minute trend.
+  This was a real bug, found by running the simulator fast: the fitted slope was
+  almost pure noise and flipped sign every tick.
+- **The slope must be statistically distinguishable from zero.** Scattered points
+  still fit *some* line, so the fit reports `t = |slope| / standard error` and
+  anything under 2 is discarded. This is better than a fixed threshold on the
+  slope because it adapts to how noisy the data is and how much of it there is,
+  instead of needing a hand-tuned constant per channel and per tick rate.
+
+A trend hit is capped at Warning and can never declare a Fault. It is a
+straight-line extrapolation and assumes the trend continues, which will not
+always be true, so only a measured limit gets to stop the machine.
+
+In a typical run the trend layer fires roughly half a minute before the
+threshold it is predicting:
+
+```
+09:36:26  Warning  Cooling is degrading    [trend_temp_diff_falling]
+09:36:53  Warning  Cooling margin low      [cooling]
+```
+
+The first line is the projection. The second is the measured threshold catching
+up 27 seconds later. That gap is the whole point of the layer.
+
+### Not repeating yourself
+
+A fault condition persists for many readings. Unsuppressed, at a 1.5 second tick
+one cooling fault writes about forty identical rows a minute and the alert
+history becomes one condition repeated until it scrolls off the screen, which is
+the fastest way to get an operator to stop reading alerts.
+
+So an alert is logged when what it *says* changes, or when the same condition has
+persisted for `MHM_ALERT_REPEAT_SEC` (60 by default) and is worth restating. The
+key is the effective status plus which rules tripped, not the message text, since
+the message embeds live measurements and differs on every tick.
+
+Trend rules are deliberately excluded from that key whenever a measured rule is
+present. A projection naturally comes and goes as the fit wobbles near its
+threshold, and if that were part of the key every flicker would re-log the
+underlying fault and defeat the suppression entirely.
+
+Measured over 100 seconds of simulation: **63 predictions, 4 alert rows**, each a
+distinct condition. The audit trail is unaffected — every prediction is still
+logged, every tick. Suppression only trims the alerts table, which is a
+human-facing summary rather than the record of what was seen.
+
 ---
 
 ## Part 6 — Dashboard
@@ -651,15 +720,16 @@ shipping a signing key that anyone reading the repo could forge tokens with.
 python -m pytest tests/ -v
 ```
 
-82 tests, all passing. They write to a temporary database, never the real audit
+117 tests, all passing. They write to a temporary database, never the real audit
 trail.
 
 | File | What it covers |
 |---|---|
-| `test_alerts.py` | each threshold rule on its own, the AND in the cooling rule, the two-sided power envelope, the per-tier overstrain limit, that rules escalate the model and the model cannot suppress a rule, and that every alert carries an action. Loads no model, so it is pure logic. |
+| `test_alerts.py` | each threshold rule on its own, the AND in the cooling rule, the two-sided power envelope, the per-tier overstrain limit, that rules escalate the model and the model cannot suppress a rule, that every alert carries an action, and that repeat suppression collapses a persisting condition without letting a flickering trend re-log it. Loads no model, so it is pure logic. |
 | `test_rul.py` | that RUL is not `200 - wear` and high torque lowers the ceiling, the per-tier ceiling ordering, that the wear-rate fit survives a tool change and refuses to guess when wear is flat, the time-compression normalisation, that the RUL rule does not double up with the tool-wear threshold but does fire for the overstrain gap, and that the vectorised training target matches the scalar physics row for row. |
+| `test_trends.py` | that a projection fires only for a channel genuinely heading at its limit, that noise and a too-short window produce nothing, that the t-statistic separates a real slope from scatter, and that a trend can raise a Warning but never a Fault. |
 | `test_units.py` | conversions round-trip, and a temperature difference has no offset applied. |
-| `test_api.py` | login protects every endpoint, forged tokens are rejected, prediction shape and probabilities, implausible readings rejected with 422, predictions and alerts reaching both audit sinks, simulator tick and buffer and injection, CSV columns carrying their units and the values actually being converted, and the PDF starting with `%PDF-`. |
+| `test_api.py` | login protects every endpoint, forged tokens are rejected, failed logins are rate limited while successful ones never are, prediction shape and probabilities, implausible readings rejected with 422, predictions and alerts reaching both audit sinks, simulator tick and buffer and injection, CSV columns carrying their units and the values actually being converted, the PDF starting with `%PDF-`, and the database running in WAL mode. |
 | `test_thresholds.py` | the offline pandas labeller and the live scalar alerter flag identical rows across all 10,000. |
 
 ---
@@ -714,7 +784,12 @@ a `remaining_life` block:
 Everything is overridable by environment variable, listed in
 `backend/config.py`: `MHM_SECRET_KEY`, `MHM_DEMO_USER`, `MHM_DEMO_PASSWORD`,
 `MHM_SIM_INTERVAL`, `MHM_SIM_AUTOSTART`, `MHM_TOKEN_TTL_MIN`, `MHM_DB_PATH`,
-`MHM_MODEL_PATH`, `MHM_RUL_MODEL_PATH`.
+`MHM_MODEL_PATH`, `MHM_RUL_MODEL_PATH`, `MHM_ALERT_REPEAT_SEC`,
+`MHM_LOGIN_MAX_ATTEMPTS`, `MHM_LOGIN_WINDOW_SEC`.
+
+Two worth knowing about when demoing: `MHM_SIM_INTERVAL` speeds the simulator up,
+and `MHM_ALERT_REPEAT_SEC` controls how often a persisting condition is
+restated in the alert history.
 
 ---
 
@@ -833,29 +908,88 @@ into -263 and trip a permanent cooling fault.
 ## Limitations
 
 The dataset is synthetic, though grounded in real physics. Real machine data is
-noisier and has sensor drift, calibration offsets and missing periods.
+noisier and has sensor drift, calibration offsets and missing periods. How much
+that costs is measured rather than guessed at, in
+[Sensor robustness](#sensor-robustness) below.
 
 There are no vibration or pressure channels, because the dataset does not have
-them.
+them. Adding a real accelerometer would be the single biggest improvement to
+this project, and the architecture is ready for it: because alerts combine a
+learned model with independent physical rules, a vibration channel can go in as
+a threshold rule with no retraining and no labelled vibration data. ISO 20816
+gives vibration-severity limits by machine class, so the thresholds would be
+justified the same way the AI4I ones are.
 
-The classifier is not time-aware. It looks at each reading on its own. Only the
-RUL wear-rate estimator uses history, and it fits a straight line. A production
-system would model the degradation trajectory rather than just its current
-gradient.
+The classifier is not time-aware, and cannot be made so from this dataset. Its
+rows have no unit id and no time ordering, so there is no sequence to learn
+from, and training on the simulator's own output would only teach the model the
+simulator. The trend layer in `backend/trends.py` addresses this from the rules
+side instead: it fits a line through recent readings and projects when a channel
+will cross its limit. That is genuinely predictive and needs no training data,
+but it is a straight-line extrapolation and assumes the trend continues, which
+is why a trend hit can never be worse than a Warning.
 
 RUL covers tool life only. Bearings, spindle and drivetrain have their own wear
-mechanisms that this dataset does not instrument, so "remaining useful life" here
-means remaining tool life.
+mechanisms that this dataset does not instrument, so "remaining useful life"
+here means remaining tool life.
 
 Login is deliberately basic: one in-memory user, no registration, no password
-reset, no refresh tokens, no rate limiting and no HTTPS. It meets "only logged-in
-users can see the dashboard" and nothing beyond that.
+reset, no refresh tokens and no HTTPS. Failed logins are rate limited, but the
+counter is per-process and in memory, so two workers means two windows and a
+restart clears it. Doing that properly needs shared state.
 
-SQLite with a single writer lock is fine for one machine at 1.5 second intervals
-and would not be for a factory of them.
+SQLite runs in WAL mode, so the dashboard reads while the simulator writes.
+There is still one writer at a time, which is fine for one machine at 1.5 second
+intervals and would not be for a factory of them.
 
 The demo password is in the source and is meant for local use. Set
 `MHM_SECRET_KEY` and `MHM_DEMO_PASSWORD` before putting this anywhere else.
+
+---
+
+## Sensor robustness
+
+`python scripts/test_robustness.py` corrupts the held-out test set the way real
+instruments fail and re-scores without retraining. It turns "the dataset is
+synthetic" from a caveat into a number.
+
+Four corruptions: Gaussian noise, calibration drift, ADC quantisation, and
+dropout where a channel freezes on its last value. Levels come from typical
+instrument specifications, not from whatever made the results look good — a type
+K thermocouple has a standard tolerance of about ±1.5 K, a rotary torque sensor
+0.1–0.5% of full scale, an encoder well under 0.1% on speed.
+
+Watch Fault recall, not accuracy. Accuracy is dominated by the Normal class and
+barely moves.
+
+| Corruption | Fault recall | Change |
+|---|---|---|
+| clean baseline | 0.838 | — |
+| noise, torque σ = 2.0 N·m | 0.750 | −0.088 |
+| every channel noisy, good sensors | 0.765 | −0.074 |
+| every channel noisy, poor sensors | 0.706 | −0.132 |
+| dropout, torque 10% of readings | 0.750 | −0.088 |
+| **drift, process temp +1 K** | **0.559** | **−0.279** |
+| **drift, air temp −1 K** | **0.559** | **−0.279** |
+
+### The finding
+
+Calibration drift on a temperature channel is far more damaging than noise on
+anything, and the direction decides whether it is dangerous.
+
+`temp_diff = process_temp − air_temp`, so the two channels enter with opposite
+signs. A process-temp sensor reading **high**, or an air-temp sensor reading
+**low**, inflates the apparent cooling margin and hides heat-dissipation faults.
+One kelvin in that direction — inside a type K thermocouple's tolerance — costs
+a third of all fault detection.
+
+Drift the other way and Fault recall goes slightly *up*: the machine looks worse
+than it is, so the system raises false alarms. That costs an inspection. The
+first direction costs a machine.
+
+The practical conclusion is that calibrating the two thermocouples against each
+other matters more than buying quieter sensors, and it is not a conclusion
+anyone would reach by looking at accuracy.
 
 ---
 

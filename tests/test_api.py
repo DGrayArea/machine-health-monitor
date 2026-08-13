@@ -317,3 +317,100 @@ def test_pdf_report_downloads_as_a_valid_pdf(
     assert res.headers["content-type"] == "application/pdf"
     assert res.content.startswith(b"%PDF-")     # the PDF magic number
     assert len(res.content) > 1000
+
+
+# ----------------------------------------------------------- rate limiting
+
+def test_repeated_failed_logins_are_rate_limited(client):
+    """
+    The password hash is deliberately slow, but that cost lands on this server,
+    not the attacker. The rate limit is what actually protects the endpoint.
+    """
+    from backend import auth
+
+    auth.reset_rate_limits()
+    bad = {"username": config.DEMO_USERNAME, "password": "wrong"}
+
+    for _ in range(config.LOGIN_MAX_ATTEMPTS):
+        assert client.post("/api/auth/login", json=bad).status_code == 401
+
+    blocked = client.post("/api/auth/login", json=bad)
+    assert blocked.status_code == 429
+    assert "Retry-After" in blocked.headers
+    assert int(blocked.headers["Retry-After"]) > 0
+
+
+def test_rate_limit_also_blocks_the_correct_password(client):
+    """Once the window is used up the door is shut, right password or not."""
+    from backend import auth
+
+    auth.reset_rate_limits()
+    bad = {"username": config.DEMO_USERNAME, "password": "wrong"}
+    for _ in range(config.LOGIN_MAX_ATTEMPTS):
+        client.post("/api/auth/login", json=bad)
+
+    good = {"username": config.DEMO_USERNAME, "password": config.DEMO_PASSWORD}
+    assert client.post("/api/auth/login", json=good).status_code == 429
+
+
+def test_a_successful_login_clears_the_failure_count(client):
+    """Mistyping a password a few times then getting it right is not an attack."""
+    from backend import auth
+
+    auth.reset_rate_limits()
+    bad = {"username": config.DEMO_USERNAME, "password": "wrong"}
+    good = {"username": config.DEMO_USERNAME, "password": config.DEMO_PASSWORD}
+
+    for _ in range(config.LOGIN_MAX_ATTEMPTS - 1):
+        client.post("/api/auth/login", json=bad)
+    assert client.post("/api/auth/login", json=good).status_code == 200
+
+    # The window is clear, so a fresh run of failures is allowed again.
+    for _ in range(config.LOGIN_MAX_ATTEMPTS - 1):
+        assert client.post("/api/auth/login", json=bad).status_code == 401
+
+
+def test_successful_logins_are_never_rate_limited(client):
+    """Only failures count, so normal use is unaffected however often it happens."""
+    from backend import auth
+
+    auth.reset_rate_limits()
+    good = {"username": config.DEMO_USERNAME, "password": config.DEMO_PASSWORD}
+    for _ in range(config.LOGIN_MAX_ATTEMPTS + 4):
+        assert client.post("/api/auth/login", json=good).status_code == 200
+
+
+def test_rate_limited_attempts_are_audited(client):
+    from backend import auth
+
+    auth.reset_rate_limits()
+    bad = {"username": config.DEMO_USERNAME, "password": "wrong"}
+    for _ in range(config.LOGIN_MAX_ATTEMPTS + 1):
+        client.post("/api/auth/login", json=bad)
+
+    assert '"reason": "rate limited"' in config.AUDIT_LOG_PATH.read_text()
+
+
+def test_the_window_ages_out():
+    """Attempts older than the window stop counting, so a lockout is temporary."""
+    from backend import auth
+
+    auth.reset_rate_limits()
+    key = "someone|127.0.0.1"
+    for i in range(config.LOGIN_MAX_ATTEMPTS):
+        auth.record_failure(key, now=float(i))
+    assert auth.is_rate_limited(key, now=float(config.LOGIN_MAX_ATTEMPTS))
+
+    past_window = config.LOGIN_WINDOW_SECONDS + config.LOGIN_MAX_ATTEMPTS + 1
+    assert not auth.is_rate_limited(key, now=past_window)
+
+
+# -------------------------------------------------------------- WAL journal
+
+def test_database_uses_write_ahead_logging():
+    """
+    WAL lets the dashboard read while the simulator writes. Without it every
+    tick briefly blocks whatever the dashboard is asking for.
+    """
+    mode = database.get_connection().execute("PRAGMA journal_mode").fetchone()[0]
+    assert mode.lower() == "wal"

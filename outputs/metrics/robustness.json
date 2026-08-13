@@ -1,0 +1,920 @@
+{
+  "baseline": {
+    "accuracy": 0.992,
+    "macro_f1": 0.9657427312368548,
+    "fault_recall": 0.8382352941176471,
+    "warning_recall": 0.9966273187183811
+  },
+  "runs": [
+    {
+      "kind": "noise",
+      "channel": "air_temp",
+      "level": 0.0,
+      "accuracy": 0.992,
+      "macro_f1": 0.9657427312368548,
+      "fault_recall": 0.8382352941176471,
+      "warning_recall": 0.9966273187183811,
+      "fault_recall_drop": 0.0
+    },
+    {
+      "kind": "noise",
+      "channel": "air_temp",
+      "level": 0.25,
+      "accuracy": 0.9525,
+      "macro_f1": 0.9178356128917668,
+      "fault_recall": 0.7794117647058824,
+      "warning_recall": 0.9258010118043845,
+      "fault_recall_drop": 0.05882352941176472
+    },
+    {
+      "kind": "noise",
+      "channel": "air_temp",
+      "level": 0.5,
+      "accuracy": 0.926,
+      "macro_f1": 0.8869770530589302,
+      "fault_recall": 0.75,
+      "warning_recall": 0.9005059021922428,
+      "fault_recall_drop": 0.08823529411764708
+    },
+    {
+      "kind": "noise",
+      "channel": "air_temp",
+      "level": 1.0,
+      "accuracy": 0.8915,
+      "macro_f1": 0.8235551389195227,
+      "fault_recall": 0.75,
+      "warning_recall": 0.836424957841484,
+      "fault_recall_drop": 0.08823529411764708
+    },
+    {
+      "kind": "noise",
+      "channel": "air_temp",
+      "level": 2.0,
+      "accuracy": 0.8605,
+      "macro_f1": 0.7774284100752951,
+      "fault_recall": 0.75,
+      "warning_recall": 0.8010118043844857,
+      "fault_recall_drop": 0.08823529411764708
+    },
+    {
+      "kind": "noise",
+      "channel": "process_temp",
+      "level": 0.0,
+      "accuracy": 0.992,
+      "macro_f1": 0.9657427312368548,
+      "fault_recall": 0.8382352941176471,
+      "warning_recall": 0.9966273187183811,
+      "fault_recall_drop": 0.0
+    },
+    {
+      "kind": "noise",
+      "channel": "process_temp",
+      "level": 0.25,
+      "accuracy": 0.96,
+      "macro_f1": 0.9262947443878601,
+      "fault_recall": 0.7794117647058824,
+      "warning_recall": 0.9477234401349073,
+      "fault_recall_drop": 0.05882352941176472
+    },
+    {
+      "kind": "noise",
+      "channel": "process_temp",
+      "level": 0.5,
+      "accuracy": 0.931,
+      "macro_f1": 0.8931077889901777,
+      "fault_recall": 0.7941176470588235,
+      "warning_recall": 0.897133220910624,
+      "fault_recall_drop": 0.044117647058823595
+    },
+    {
+      "kind": "noise",
+      "channel": "process_temp",
+      "level": 1.0,
+      "accuracy": 0.8955,
+      "macro_f1": 0.8355948822487687,
+      "fault_recall": 0.7205882352941176,
+      "warning_recall": 0.8482293423271501,
+      "fault_recall_drop": 0.11764705882352944
+    },
+    {
+      "kind": "noise",
+      "channel": "process_temp",
+      "level": 2.0,
+      "accuracy": 0.8575,
+      "macro_f1": 0.7803948000788962,
+      "fault_recall": 0.6911764705882353,
+      "warning_recall": 0.8195615514333895,
+      "fault_recall_drop": 0.1470588235294118
+    },
+    {
+      "kind": "noise",
+      "channel": "rot_speed",
+      "level": 0.0,
+      "accuracy": 0.992,
+      "macro_f1": 0.9657427312368548,
+      "fault_recall": 0.8382352941176471,
+      "warning_recall": 0.9966273187183811,
+      "fault_recall_drop": 0.0
+    },
+    {
+      "kind": "noise",
+      "channel": "rot_speed",
+      "level": 1.0,
+      "accuracy": 0.991,
+      "macro_f1": 0.9621369063626043,
+      "fault_recall": 0.8235294117647058,
+      "warning_recall": 0.9949409780775716,
+      "fault_recall_drop": 0.014705882352941235
+    },
+    {
+      "kind": "noise",
+      "channel": "rot_speed",
+      "level": 5.0,
+      "accuracy": 0.989,
+      "macro_f1": 0.9582582851363579,
+      "fault_recall": 0.8235294117647058,
+      "warning_recall": 0.9949409780775716,
+      "fault_recall_drop": 0.014705882352941235
+    },
+    {
+      "kind": "noise",
+      "channel": "rot_speed",
+      "level": 15.0,
+      "accuracy": 0.9795,
+      "macro_f1": 0.9432711809858739,
+      "fault_recall": 0.8088235294117647,
+      "warning_recall": 0.9730185497470489,
+      "fault_recall_drop": 0.02941176470588236
+    },
+    {
+      "kind": "noise",
+      "channel": "rot_speed",
+      "level": 40.0,
+      "accuracy": 0.9495,
+      "macro_f1": 0.8900548121383439,
+      "fault_recall": 0.7647058823529411,
+      "warning_recall": 0.9123102866779089,
+      "fault_recall_drop": 0.07352941176470595
+    },
+    {
+      "kind": "noise",
+      "channel": "torque",
+      "level": 0.0,
+      "accuracy": 0.992,
+      "macro_f1": 0.9657427312368548,
+      "fault_recall": 0.8382352941176471,
+      "warning_recall": 0.9966273187183811,
+      "fault_recall_drop": 0.0
+    },
+    {
+      "kind": "noise",
+      "channel": "torque",
+      "level": 0.2,
+      "accuracy": 0.988,
+      "macro_f1": 0.9479691888002003,
+      "fault_recall": 0.8088235294117647,
+      "warning_recall": 0.9881956155143339,
+      "fault_recall_drop": 0.02941176470588236
+    },
+    {
+      "kind": "noise",
+      "channel": "torque",
+      "level": 0.5,
+      "accuracy": 0.987,
+      "macro_f1": 0.9493404161630573,
+      "fault_recall": 0.8088235294117647,
+      "warning_recall": 0.9881956155143339,
+      "fault_recall_drop": 0.02941176470588236
+    },
+    {
+      "kind": "noise",
+      "channel": "torque",
+      "level": 1.0,
+      "accuracy": 0.979,
+      "macro_f1": 0.929519162314315,
+      "fault_recall": 0.7941176470588235,
+      "warning_recall": 0.9713322091062394,
+      "fault_recall_drop": 0.044117647058823595
+    },
+    {
+      "kind": "noise",
+      "channel": "torque",
+      "level": 2.0,
+      "accuracy": 0.963,
+      "macro_f1": 0.8984662137876297,
+      "fault_recall": 0.75,
+      "warning_recall": 0.9494097807757167,
+      "fault_recall_drop": 0.08823529411764708
+    },
+    {
+      "kind": "drift",
+      "channel": "air_temp",
+      "level": -4.0,
+      "accuracy": 0.869,
+      "macro_f1": 0.7896679261847023,
+      "fault_recall": 0.5441176470588235,
+      "warning_recall": 0.6155143338954469,
+      "fault_recall_drop": 0.2941176470588236
+    },
+    {
+      "kind": "drift",
+      "channel": "air_temp",
+      "level": -2.0,
+      "accuracy": 0.8685,
+      "macro_f1": 0.7870232890702934,
+      "fault_recall": 0.5441176470588235,
+      "warning_recall": 0.6138279932546374,
+      "fault_recall_drop": 0.2941176470588236
+    },
+    {
+      "kind": "drift",
+      "channel": "air_temp",
+      "level": -1.0,
+      "accuracy": 0.8805,
+      "macro_f1": 0.8012891644540351,
+      "fault_recall": 0.5588235294117647,
+      "warning_recall": 0.6526138279932546,
+      "fault_recall_drop": 0.27941176470588236
+    },
+    {
+      "kind": "drift",
+      "channel": "air_temp",
+      "level": 0.0,
+      "accuracy": 0.992,
+      "macro_f1": 0.9657427312368548,
+      "fault_recall": 0.8382352941176471,
+      "warning_recall": 0.9966273187183811,
+      "fault_recall_drop": 0.0
+    },
+    {
+      "kind": "drift",
+      "channel": "air_temp",
+      "level": 1.0,
+      "accuracy": 0.8565,
+      "macro_f1": 0.7762992357683615,
+      "fault_recall": 0.8529411764705882,
+      "warning_recall": 0.9173693086003373,
+      "fault_recall_drop": -0.014705882352941124
+    },
+    {
+      "kind": "drift",
+      "channel": "air_temp",
+      "level": 2.0,
+      "accuracy": 0.716,
+      "macro_f1": 0.6486261710884396,
+      "fault_recall": 0.8529411764705882,
+      "warning_recall": 0.9055649241146712,
+      "fault_recall_drop": -0.014705882352941124
+    },
+    {
+      "kind": "drift",
+      "channel": "air_temp",
+      "level": 4.0,
+      "accuracy": 0.693,
+      "macro_f1": 0.5997813991668259,
+      "fault_recall": 0.8529411764705882,
+      "warning_recall": 0.8802698145025295,
+      "fault_recall_drop": -0.014705882352941124
+    },
+    {
+      "kind": "drift",
+      "channel": "process_temp",
+      "level": -4.0,
+      "accuracy": 0.7005,
+      "macro_f1": 0.6264897862563341,
+      "fault_recall": 0.8382352941176471,
+      "warning_recall": 0.9072512647554806,
+      "fault_recall_drop": 0.0
+    },
+    {
+      "kind": "drift",
+      "channel": "process_temp",
+      "level": -2.0,
+      "accuracy": 0.719,
+      "macro_f1": 0.6651081939221174,
+      "fault_recall": 0.8382352941176471,
+      "warning_recall": 0.9173693086003373,
+      "fault_recall_drop": 0.0
+    },
+    {
+      "kind": "drift",
+      "channel": "process_temp",
+      "level": -1.0,
+      "accuracy": 0.859,
+      "macro_f1": 0.7883145577823775,
+      "fault_recall": 0.8382352941176471,
+      "warning_recall": 0.9258010118043845,
+      "fault_recall_drop": 0.0
+    },
+    {
+      "kind": "drift",
+      "channel": "process_temp",
+      "level": 0.0,
+      "accuracy": 0.992,
+      "macro_f1": 0.9657427312368548,
+      "fault_recall": 0.8382352941176471,
+      "warning_recall": 0.9966273187183811,
+      "fault_recall_drop": 0.0
+    },
+    {
+      "kind": "drift",
+      "channel": "process_temp",
+      "level": 1.0,
+      "accuracy": 0.8805,
+      "macro_f1": 0.8012891644540351,
+      "fault_recall": 0.5588235294117647,
+      "warning_recall": 0.6526138279932546,
+      "fault_recall_drop": 0.27941176470588236
+    },
+    {
+      "kind": "drift",
+      "channel": "process_temp",
+      "level": 2.0,
+      "accuracy": 0.869,
+      "macro_f1": 0.7896679261847023,
+      "fault_recall": 0.5441176470588235,
+      "warning_recall": 0.6155143338954469,
+      "fault_recall_drop": 0.2941176470588236
+    },
+    {
+      "kind": "drift",
+      "channel": "process_temp",
+      "level": 4.0,
+      "accuracy": 0.8695,
+      "macro_f1": 0.793997763399186,
+      "fault_recall": 0.5588235294117647,
+      "warning_recall": 0.6155143338954469,
+      "fault_recall_drop": 0.27941176470588236
+    },
+    {
+      "kind": "drift",
+      "channel": "rot_speed",
+      "level": -80.0,
+      "accuracy": 0.908,
+      "macro_f1": 0.823695978142156,
+      "fault_recall": 0.7058823529411765,
+      "warning_recall": 0.927487352445194,
+      "fault_recall_drop": 0.13235294117647056
+    },
+    {
+      "kind": "drift",
+      "channel": "rot_speed",
+      "level": -40.0,
+      "accuracy": 0.9485,
+      "macro_f1": 0.8839135021618345,
+      "fault_recall": 0.75,
+      "warning_recall": 0.9629005059021922,
+      "fault_recall_drop": 0.08823529411764708
+    },
+    {
+      "kind": "drift",
+      "channel": "rot_speed",
+      "level": -15.0,
+      "accuracy": 0.9745,
+      "macro_f1": 0.9417498102744712,
+      "fault_recall": 0.8088235294117647,
+      "warning_recall": 0.9915682967959528,
+      "fault_recall_drop": 0.02941176470588236
+    },
+    {
+      "kind": "drift",
+      "channel": "rot_speed",
+      "level": 0.0,
+      "accuracy": 0.992,
+      "macro_f1": 0.9657427312368548,
+      "fault_recall": 0.8382352941176471,
+      "warning_recall": 0.9966273187183811,
+      "fault_recall_drop": 0.0
+    },
+    {
+      "kind": "drift",
+      "channel": "rot_speed",
+      "level": 15.0,
+      "accuracy": 0.975,
+      "macro_f1": 0.9307229188644524,
+      "fault_recall": 0.7647058823529411,
+      "warning_recall": 0.954468802698145,
+      "fault_recall_drop": 0.07352941176470595
+    },
+    {
+      "kind": "drift",
+      "channel": "rot_speed",
+      "level": 40.0,
+      "accuracy": 0.9385,
+      "macro_f1": 0.8604197120599291,
+      "fault_recall": 0.6470588235294118,
+      "warning_recall": 0.8566610455311973,
+      "fault_recall_drop": 0.19117647058823528
+    },
+    {
+      "kind": "drift",
+      "channel": "rot_speed",
+      "level": 80.0,
+      "accuracy": 0.889,
+      "macro_f1": 0.7819503619945406,
+      "fault_recall": 0.5588235294117647,
+      "warning_recall": 0.7251264755480608,
+      "fault_recall_drop": 0.27941176470588236
+    },
+    {
+      "kind": "drift",
+      "channel": "torque",
+      "level": -4.0,
+      "accuracy": 0.91,
+      "macro_f1": 0.7955777321323539,
+      "fault_recall": 0.5735294117647058,
+      "warning_recall": 0.9258010118043845,
+      "fault_recall_drop": 0.26470588235294124
+    },
+    {
+      "kind": "drift",
+      "channel": "torque",
+      "level": -2.0,
+      "accuracy": 0.9565,
+      "macro_f1": 0.8769600376907469,
+      "fault_recall": 0.7205882352941176,
+      "warning_recall": 0.9510961214165261,
+      "fault_recall_drop": 0.11764705882352944
+    },
+    {
+      "kind": "drift",
+      "channel": "torque",
+      "level": -1.0,
+      "accuracy": 0.975,
+      "macro_f1": 0.9235327985159394,
+      "fault_recall": 0.7794117647058824,
+      "warning_recall": 0.9763912310286678,
+      "fault_recall_drop": 0.05882352941176472
+    },
+    {
+      "kind": "drift",
+      "channel": "torque",
+      "level": 0.0,
+      "accuracy": 0.992,
+      "macro_f1": 0.9657427312368548,
+      "fault_recall": 0.8382352941176471,
+      "warning_recall": 0.9966273187183811,
+      "fault_recall_drop": 0.0
+    },
+    {
+      "kind": "drift",
+      "channel": "torque",
+      "level": 1.0,
+      "accuracy": 0.9745,
+      "macro_f1": 0.918958236563998,
+      "fault_recall": 0.7794117647058824,
+      "warning_recall": 0.9561551433389545,
+      "fault_recall_drop": 0.05882352941176472
+    },
+    {
+      "kind": "drift",
+      "channel": "torque",
+      "level": 2.0,
+      "accuracy": 0.957,
+      "macro_f1": 0.8855004569085975,
+      "fault_recall": 0.7647058823529411,
+      "warning_recall": 0.9190556492411467,
+      "fault_recall_drop": 0.07352941176470595
+    },
+    {
+      "kind": "drift",
+      "channel": "torque",
+      "level": 4.0,
+      "accuracy": 0.9335,
+      "macro_f1": 0.8454523209194419,
+      "fault_recall": 0.7794117647058824,
+      "warning_recall": 0.8954468802698144,
+      "fault_recall_drop": 0.05882352941176472
+    },
+    {
+      "kind": "quantisation",
+      "channel": "air_temp",
+      "level": 0.0,
+      "accuracy": 0.992,
+      "macro_f1": 0.9657427312368548,
+      "fault_recall": 0.8382352941176471,
+      "warning_recall": 0.9966273187183811,
+      "fault_recall_drop": 0.0
+    },
+    {
+      "kind": "quantisation",
+      "channel": "air_temp",
+      "level": 0.1,
+      "accuracy": 0.992,
+      "macro_f1": 0.9657427312368548,
+      "fault_recall": 0.8382352941176471,
+      "warning_recall": 0.9966273187183811,
+      "fault_recall_drop": 0.0
+    },
+    {
+      "kind": "quantisation",
+      "channel": "air_temp",
+      "level": 0.5,
+      "accuracy": 0.9725,
+      "macro_f1": 0.9499752389099984,
+      "fault_recall": 0.8382352941176471,
+      "warning_recall": 0.9595278246205734,
+      "fault_recall_drop": 0.0
+    },
+    {
+      "kind": "quantisation",
+      "channel": "air_temp",
+      "level": 1.0,
+      "accuracy": 0.9445,
+      "macro_f1": 0.9121460524888106,
+      "fault_recall": 0.7941176470588235,
+      "warning_recall": 0.9139966273187183,
+      "fault_recall_drop": 0.044117647058823595
+    },
+    {
+      "kind": "quantisation",
+      "channel": "process_temp",
+      "level": 0.0,
+      "accuracy": 0.992,
+      "macro_f1": 0.9657427312368548,
+      "fault_recall": 0.8382352941176471,
+      "warning_recall": 0.9966273187183811,
+      "fault_recall_drop": 0.0
+    },
+    {
+      "kind": "quantisation",
+      "channel": "process_temp",
+      "level": 0.1,
+      "accuracy": 0.992,
+      "macro_f1": 0.9657427312368548,
+      "fault_recall": 0.8382352941176471,
+      "warning_recall": 0.9966273187183811,
+      "fault_recall_drop": 0.0
+    },
+    {
+      "kind": "quantisation",
+      "channel": "process_temp",
+      "level": 0.5,
+      "accuracy": 0.9715,
+      "macro_f1": 0.9391515342814672,
+      "fault_recall": 0.8088235294117647,
+      "warning_recall": 0.96964586846543,
+      "fault_recall_drop": 0.02941176470588236
+    },
+    {
+      "kind": "quantisation",
+      "channel": "process_temp",
+      "level": 1.0,
+      "accuracy": 0.9425,
+      "macro_f1": 0.9054473611374041,
+      "fault_recall": 0.7794117647058824,
+      "warning_recall": 0.9106239460370995,
+      "fault_recall_drop": 0.05882352941176472
+    },
+    {
+      "kind": "quantisation",
+      "channel": "rot_speed",
+      "level": 0.0,
+      "accuracy": 0.992,
+      "macro_f1": 0.9657427312368548,
+      "fault_recall": 0.8382352941176471,
+      "warning_recall": 0.9966273187183811,
+      "fault_recall_drop": 0.0
+    },
+    {
+      "kind": "quantisation",
+      "channel": "rot_speed",
+      "level": 1.0,
+      "accuracy": 0.992,
+      "macro_f1": 0.9657427312368548,
+      "fault_recall": 0.8382352941176471,
+      "warning_recall": 0.9966273187183811,
+      "fault_recall_drop": 0.0
+    },
+    {
+      "kind": "quantisation",
+      "channel": "rot_speed",
+      "level": 10.0,
+      "accuracy": 0.989,
+      "macro_f1": 0.9605077453177499,
+      "fault_recall": 0.8235294117647058,
+      "warning_recall": 0.9881956155143339,
+      "fault_recall_drop": 0.014705882352941235
+    },
+    {
+      "kind": "quantisation",
+      "channel": "rot_speed",
+      "level": 50.0,
+      "accuracy": 0.9695,
+      "macro_f1": 0.9392077528469492,
+      "fault_recall": 0.8088235294117647,
+      "warning_recall": 0.9258010118043845,
+      "fault_recall_drop": 0.02941176470588236
+    },
+    {
+      "kind": "quantisation",
+      "channel": "torque",
+      "level": 0.0,
+      "accuracy": 0.992,
+      "macro_f1": 0.9657427312368548,
+      "fault_recall": 0.8382352941176471,
+      "warning_recall": 0.9966273187183811,
+      "fault_recall_drop": 0.0
+    },
+    {
+      "kind": "quantisation",
+      "channel": "torque",
+      "level": 0.1,
+      "accuracy": 0.992,
+      "macro_f1": 0.9657427312368548,
+      "fault_recall": 0.8382352941176471,
+      "warning_recall": 0.9966273187183811,
+      "fault_recall_drop": 0.0
+    },
+    {
+      "kind": "quantisation",
+      "channel": "torque",
+      "level": 1.0,
+      "accuracy": 0.9885,
+      "macro_f1": 0.9555867033705785,
+      "fault_recall": 0.8235294117647058,
+      "warning_recall": 0.9898819561551433,
+      "fault_recall_drop": 0.014705882352941235
+    },
+    {
+      "kind": "quantisation",
+      "channel": "torque",
+      "level": 5.0,
+      "accuracy": 0.9705,
+      "macro_f1": 0.9083820864755655,
+      "fault_recall": 0.75,
+      "warning_recall": 0.9629005059021922,
+      "fault_recall_drop": 0.08823529411764708
+    },
+    {
+      "kind": "dropout",
+      "channel": "air_temp",
+      "level": 0.0,
+      "accuracy": 0.992,
+      "macro_f1": 0.9657427312368548,
+      "fault_recall": 0.8382352941176471,
+      "warning_recall": 0.9966273187183811,
+      "fault_recall_drop": 0.0
+    },
+    {
+      "kind": "dropout",
+      "channel": "air_temp",
+      "level": 0.01,
+      "accuracy": 0.99,
+      "macro_f1": 0.9641309513930874,
+      "fault_recall": 0.8382352941176471,
+      "warning_recall": 0.9932546374367622,
+      "fault_recall_drop": 0.0
+    },
+    {
+      "kind": "dropout",
+      "channel": "air_temp",
+      "level": 0.05,
+      "accuracy": 0.983,
+      "macro_f1": 0.9563983558757533,
+      "fault_recall": 0.8382352941176471,
+      "warning_recall": 0.9881956155143339,
+      "fault_recall_drop": 0.0
+    },
+    {
+      "kind": "dropout",
+      "channel": "air_temp",
+      "level": 0.1,
+      "accuracy": 0.9685,
+      "macro_f1": 0.933727375291383,
+      "fault_recall": 0.8235294117647058,
+      "warning_recall": 0.9730185497470489,
+      "fault_recall_drop": 0.014705882352941235
+    },
+    {
+      "kind": "dropout",
+      "channel": "air_temp",
+      "level": 0.25,
+      "accuracy": 0.938,
+      "macro_f1": 0.879339558458875,
+      "fault_recall": 0.7794117647058824,
+      "warning_recall": 0.927487352445194,
+      "fault_recall_drop": 0.05882352941176472
+    },
+    {
+      "kind": "dropout",
+      "channel": "process_temp",
+      "level": 0.0,
+      "accuracy": 0.992,
+      "macro_f1": 0.9657427312368548,
+      "fault_recall": 0.8382352941176471,
+      "warning_recall": 0.9966273187183811,
+      "fault_recall_drop": 0.0
+    },
+    {
+      "kind": "dropout",
+      "channel": "process_temp",
+      "level": 0.01,
+      "accuracy": 0.99,
+      "macro_f1": 0.9641388468134674,
+      "fault_recall": 0.8382352941176471,
+      "warning_recall": 0.9949409780775716,
+      "fault_recall_drop": 0.0
+    },
+    {
+      "kind": "dropout",
+      "channel": "process_temp",
+      "level": 0.05,
+      "accuracy": 0.986,
+      "macro_f1": 0.9563784947956661,
+      "fault_recall": 0.8382352941176471,
+      "warning_recall": 0.9881956155143339,
+      "fault_recall_drop": 0.0
+    },
+    {
+      "kind": "dropout",
+      "channel": "process_temp",
+      "level": 0.1,
+      "accuracy": 0.9825,
+      "macro_f1": 0.9494937247789235,
+      "fault_recall": 0.8382352941176471,
+      "warning_recall": 0.9865092748735245,
+      "fault_recall_drop": 0.0
+    },
+    {
+      "kind": "dropout",
+      "channel": "process_temp",
+      "level": 0.25,
+      "accuracy": 0.967,
+      "macro_f1": 0.926237036254285,
+      "fault_recall": 0.8235294117647058,
+      "warning_recall": 0.9645868465430016,
+      "fault_recall_drop": 0.014705882352941235
+    },
+    {
+      "kind": "dropout",
+      "channel": "rot_speed",
+      "level": 0.0,
+      "accuracy": 0.992,
+      "macro_f1": 0.9657427312368548,
+      "fault_recall": 0.8382352941176471,
+      "warning_recall": 0.9966273187183811,
+      "fault_recall_drop": 0.0
+    },
+    {
+      "kind": "dropout",
+      "channel": "rot_speed",
+      "level": 0.01,
+      "accuracy": 0.9895,
+      "macro_f1": 0.9567089754584607,
+      "fault_recall": 0.8235294117647058,
+      "warning_recall": 0.9949409780775716,
+      "fault_recall_drop": 0.014705882352941235
+    },
+    {
+      "kind": "dropout",
+      "channel": "rot_speed",
+      "level": 0.05,
+      "accuracy": 0.981,
+      "macro_f1": 0.942425564575315,
+      "fault_recall": 0.7941176470588235,
+      "warning_recall": 0.9865092748735245,
+      "fault_recall_drop": 0.044117647058823595
+    },
+    {
+      "kind": "dropout",
+      "channel": "rot_speed",
+      "level": 0.1,
+      "accuracy": 0.9685,
+      "macro_f1": 0.9257522129786335,
+      "fault_recall": 0.8235294117647058,
+      "warning_recall": 0.96964586846543,
+      "fault_recall_drop": 0.014705882352941235
+    },
+    {
+      "kind": "dropout",
+      "channel": "rot_speed",
+      "level": 0.25,
+      "accuracy": 0.955,
+      "macro_f1": 0.8915332013709466,
+      "fault_recall": 0.7647058823529411,
+      "warning_recall": 0.9527824620573356,
+      "fault_recall_drop": 0.07352941176470595
+    },
+    {
+      "kind": "dropout",
+      "channel": "torque",
+      "level": 0.0,
+      "accuracy": 0.992,
+      "macro_f1": 0.9657427312368548,
+      "fault_recall": 0.8382352941176471,
+      "warning_recall": 0.9966273187183811,
+      "fault_recall_drop": 0.0
+    },
+    {
+      "kind": "dropout",
+      "channel": "torque",
+      "level": 0.01,
+      "accuracy": 0.99,
+      "macro_f1": 0.9591967900966392,
+      "fault_recall": 0.8235294117647058,
+      "warning_recall": 0.9932546374367622,
+      "fault_recall_drop": 0.014705882352941235
+    },
+    {
+      "kind": "dropout",
+      "channel": "torque",
+      "level": 0.05,
+      "accuracy": 0.987,
+      "macro_f1": 0.9486211160804121,
+      "fault_recall": 0.8235294117647058,
+      "warning_recall": 0.9898819561551433,
+      "fault_recall_drop": 0.014705882352941235
+    },
+    {
+      "kind": "dropout",
+      "channel": "torque",
+      "level": 0.1,
+      "accuracy": 0.979,
+      "macro_f1": 0.9238224050527716,
+      "fault_recall": 0.75,
+      "warning_recall": 0.9831365935919055,
+      "fault_recall_drop": 0.08823529411764708
+    },
+    {
+      "kind": "dropout",
+      "channel": "torque",
+      "level": 0.25,
+      "accuracy": 0.967,
+      "macro_f1": 0.8892759554912694,
+      "fault_recall": 0.75,
+      "warning_recall": 0.9730185497470489,
+      "fault_recall_drop": 0.08823529411764708
+    },
+    {
+      "kind": "dropout",
+      "channel": "tool_wear",
+      "level": 0.0,
+      "accuracy": 0.992,
+      "macro_f1": 0.9657427312368548,
+      "fault_recall": 0.8382352941176471,
+      "warning_recall": 0.9966273187183811,
+      "fault_recall_drop": 0.0
+    },
+    {
+      "kind": "dropout",
+      "channel": "tool_wear",
+      "level": 0.01,
+      "accuracy": 0.9895,
+      "macro_f1": 0.9637238607560435,
+      "fault_recall": 0.8382352941176471,
+      "warning_recall": 0.9915682967959528,
+      "fault_recall_drop": 0.0
+    },
+    {
+      "kind": "dropout",
+      "channel": "tool_wear",
+      "level": 0.05,
+      "accuracy": 0.9805,
+      "macro_f1": 0.9518959105220054,
+      "fault_recall": 0.8382352941176471,
+      "warning_recall": 0.9730185497470489,
+      "fault_recall_drop": 0.0
+    },
+    {
+      "kind": "dropout",
+      "channel": "tool_wear",
+      "level": 0.1,
+      "accuracy": 0.9615,
+      "macro_f1": 0.9317432752793184,
+      "fault_recall": 0.8235294117647058,
+      "warning_recall": 0.9443507588532883,
+      "fault_recall_drop": 0.014705882352941235
+    },
+    {
+      "kind": "dropout",
+      "channel": "tool_wear",
+      "level": 0.25,
+      "accuracy": 0.935,
+      "macro_f1": 0.8938247094071209,
+      "fault_recall": 0.8088235294117647,
+      "warning_recall": 0.9038785834738617,
+      "fault_recall_drop": 0.02941176470588236
+    },
+    {
+      "kind": "combined",
+      "channel": "all",
+      "level": 1.0,
+      "accuracy": 0.943,
+      "macro_f1": 0.8988821894184844,
+      "fault_recall": 0.7647058823529411,
+      "warning_recall": 0.9190556492411467,
+      "fault_recall_drop": 0.07352941176470595
+    },
+    {
+      "kind": "combined",
+      "channel": "all",
+      "level": 4.0,
+      "accuracy": 0.8625,
+      "macro_f1": 0.7762857942729163,
+      "fault_recall": 0.7058823529411765,
+      "warning_recall": 0.806070826306914,
+      "fault_recall_drop": 0.13235294117647056
+    }
+  ]
+}

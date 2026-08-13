@@ -26,12 +26,14 @@ from __future__ import annotations
 import json
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Response, status
+from fastapi import (
+    Depends, FastAPI, HTTPException, Query, Request, Response, status,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 from backend import auth, config, database, predictor, reporting
-from backend.alerts import build_alert
+from backend.alerts import build_alert, should_log
 from backend.schemas import (
     AlertRecord,
     LiveSnapshot,
@@ -108,13 +110,31 @@ def health() -> dict:
 
 
 @app.post("/api/auth/login", response_model=TokenResponse, tags=["auth"])
-def login(payload: LoginRequest) -> TokenResponse:
+def login(payload: LoginRequest, request: Request) -> TokenResponse:
+    # Rate limit on username AND source address together. Username alone would
+    # let anyone lock a real user out by failing their login on purpose; address
+    # alone would let one attacker work through a list of usernames freely.
+    client = request.client.host if request.client else "unknown"
+    key = f"{payload.username}|{client}"
+
+    if auth.is_rate_limited(key):
+        retry_after = auth.seconds_until_retry(key)
+        database.log_auth_event(payload.username, False, "rate limited")
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            "Too many failed sign-in attempts. Try again shortly.",
+            headers={"Retry-After": str(retry_after)},
+        )
+
     user = auth.authenticate(payload.username, payload.password)
     if user is None:
+        auth.record_failure(key)
         # Deliberately vague, so it never reveals whether the username exists.
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED, "Incorrect username or password."
         )
+
+    auth.clear_attempts(key)
     token, ttl = auth.create_token(user["username"])
     return TokenResponse(access_token=token, expires_in_seconds=ttl,
                          username=user["username"])
@@ -168,7 +188,11 @@ def predict_endpoint(
         username=user["username"], timestamp=timestamp,
         remaining_life=result["rul"],
     )
-    if alert is not None:
+    # Same repeat suppression as the simulator: posting an unchanged condition
+    # repeatedly still returns the alert in the response, it just does not add
+    # another identical row to the history.
+    signature = alert.pop("_signature", None) if alert else None
+    if alert is not None and (signature is None or should_log(signature)):
         database.log_alert(
             prediction_id=prediction_id, severity=alert["severity"],
             status=effective_status, title=alert["title"], message=alert["message"],

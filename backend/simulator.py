@@ -48,8 +48,8 @@ import threading
 from collections import deque
 from typing import Any, Callable
 
-from backend import config, database, rul
-from backend.alerts import build_alert
+from backend import config, database, rul, trends
+from backend.alerts import build_alert, reset_suppression, should_log
 from backend.predictor import ModelNotAvailable, predict
 
 # --- Nominal operating point (matches the AI4I dataset's centre of mass) ---
@@ -250,11 +250,18 @@ class SimulationRunner:
             self.last_error = str(exc)
             return None
 
+        # Trend rules need history, so they are evaluated here where the buffer
+        # lives and handed to build_alert. A single reading cannot support them.
+        with self._lock:
+            recent = list(self.buffer)
+        trend_hits = trends.detect(recent)
+
         effective_status, alert = build_alert(
             model_status=result["status"],
             confidence=result["confidence"],
             features=result["features"],
             product_type=reading["product_type"],
+            extra_hits=trend_hits,
         )
 
         # Layer 3 of the RUL estimate. The physics gives remaining cutting
@@ -286,7 +293,10 @@ class SimulationRunner:
             timestamp=timestamp, remaining_life=remaining_life,
         )
 
-        if alert is not None:
+        # Pop the suppression key before the alert goes anywhere else: it is an
+        # internal detail, not part of the record or the API response.
+        signature = alert.pop("_signature", None) if alert else None
+        if alert is not None and (signature is None or should_log(signature)):
             database.log_alert(
                 prediction_id=prediction_id, severity=alert["severity"],
                 status=effective_status, title=alert["title"],
@@ -327,6 +337,9 @@ class SimulationRunner:
     def start(self) -> bool:
         if self.running:
             return False
+        # A restart is a fresh run, so nothing should be suppressed because of
+        # what the previous run happened to be alerting about.
+        reset_suppression()
         self._stop.clear()
         self._thread = threading.Thread(target=self._loop, daemon=True,
                                         name="sensor-simulator")

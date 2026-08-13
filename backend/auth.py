@@ -36,6 +36,9 @@ from __future__ import annotations
 import hashlib
 import hmac
 import os
+import threading
+import time
+from collections import defaultdict, deque
 from datetime import datetime, timedelta, timezone
 
 import jwt
@@ -46,6 +49,75 @@ from backend import config, database
 
 PBKDF2_ITERATIONS = 200_000
 _bearer = HTTPBearer(auto_error=False)
+
+
+# --------------------------------------------------------------------------
+# Login rate limiting
+# --------------------------------------------------------------------------
+#
+# The 200,000 PBKDF2 iterations make each guess slow, but that cost lands on
+# this server, not on the attacker: they fire requests as fast as they like and
+# we burn a CPU core per guess. So the hash protects the stored password if the
+# database leaks, while this protects the login endpoint itself.
+#
+# A sliding window per key, holding the timestamps of recent failures. Only
+# FAILURES count, so someone logging in normally is never affected however often
+# they do it. A success clears the window, because a legitimate user who mistypes
+# their password four times and then gets it right should not stay penalised.
+#
+# The limitation, stated plainly: this is per-process and in memory. Run two
+# workers and an attacker gets two windows, and a restart clears it. Doing it
+# properly means shared state, Redis or the database. For a single-process
+# deployment it closes the hole; for anything larger it is a speed bump.
+
+_attempts: dict[str, deque[float]] = defaultdict(deque)
+_attempts_lock = threading.Lock()
+
+
+def _prune(window: deque[float], now: float) -> None:
+    """Drop attempts that have aged out of the window."""
+    cutoff = now - config.LOGIN_WINDOW_SECONDS
+    while window and window[0] < cutoff:
+        window.popleft()
+
+
+def is_rate_limited(key: str, now: float | None = None) -> bool:
+    """True when this key has used up its failed attempts for the window."""
+    now = time.monotonic() if now is None else now
+    with _attempts_lock:
+        window = _attempts[key]
+        _prune(window, now)
+        return len(window) >= config.LOGIN_MAX_ATTEMPTS
+
+
+def record_failure(key: str, now: float | None = None) -> None:
+    now = time.monotonic() if now is None else now
+    with _attempts_lock:
+        window = _attempts[key]
+        _prune(window, now)
+        window.append(now)
+
+
+def clear_attempts(key: str) -> None:
+    """Called on a successful login, so one bad day does not lock someone out."""
+    with _attempts_lock:
+        _attempts.pop(key, None)
+
+
+def reset_rate_limits() -> None:
+    """Clear every window. Used by tests."""
+    with _attempts_lock:
+        _attempts.clear()
+
+
+def seconds_until_retry(key: str, now: float | None = None) -> int:
+    """How long until the oldest failure ages out, for the Retry-After header."""
+    now = time.monotonic() if now is None else now
+    with _attempts_lock:
+        window = _attempts[key]
+        if not window:
+            return 0
+        return max(1, int(config.LOGIN_WINDOW_SECONDS - (now - window[0])))
 
 
 def hash_password(password: str, salt: bytes | None = None) -> str:

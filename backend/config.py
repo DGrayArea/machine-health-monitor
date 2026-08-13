@@ -47,6 +47,17 @@ TOKEN_TTL_MINUTES = int(os.getenv("MHM_TOKEN_TTL_MIN", "480"))  # one shift
 DEMO_USERNAME = os.getenv("MHM_DEMO_USER", "engineer")
 DEMO_PASSWORD = os.getenv("MHM_DEMO_PASSWORD", "maintenance123")
 
+# Login rate limiting. Without it, the 200k-iteration hash is the only thing
+# slowing a password guesser down, and that is a CPU cost we pay, not them.
+LOGIN_MAX_ATTEMPTS = int(os.getenv("MHM_LOGIN_MAX_ATTEMPTS", "8"))
+LOGIN_WINDOW_SECONDS = float(os.getenv("MHM_LOGIN_WINDOW_SEC", "300"))
+
+# --- Alerts -------------------------------------------------------------
+# An unchanged condition is re-logged at most this often. The simulator ticks
+# every 1.5 s, so without this a single cooling fault writes 40 identical rows a
+# minute and the alert history becomes unreadable. See backend/alerts.py.
+ALERT_REPEAT_SECONDS = float(os.getenv("MHM_ALERT_REPEAT_SEC", "60"))
+
 # --- Simulator ----------------------------------------------------------
 SIM_INTERVAL_SECONDS = float(os.getenv("MHM_SIM_INTERVAL", "1.5"))
 SIM_BUFFER_SIZE = int(os.getenv("MHM_SIM_BUFFER", "240"))  # ~6 min of history

@@ -117,6 +117,17 @@ def get_connection() -> sqlite3.Connection:
         config.DB_PATH.parent.mkdir(parents=True, exist_ok=True)
         _conn = sqlite3.connect(config.DB_PATH, check_same_thread=False)
         _conn.row_factory = sqlite3.Row
+
+        # Write-ahead logging. In the default rollback-journal mode a writer
+        # blocks every reader, so each simulator tick briefly stalls whatever
+        # the dashboard is asking for. WAL puts writes in a side file, letting
+        # readers carry on against the last committed state. It is one line and
+        # it removes most of the "SQLite is single-writer" caveat: there is
+        # still one writer at a time, but readers no longer queue behind it.
+        _conn.execute("PRAGMA journal_mode=WAL")
+        # Wait rather than raising if a write does collide.
+        _conn.execute("PRAGMA busy_timeout=5000")
+
         _conn.executescript(SCHEMA)
         _conn.commit()
         _apply_migrations(_conn)

@@ -27,9 +27,17 @@ def isolated_storage(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "AUDIT_LOG_PATH", tmp_path / "audit.jsonl")
     monkeypatch.setattr(config, "EXPORTS_DIR", tmp_path / "exports")
 
-    from backend import database
+    from backend import alerts, database
     monkeypatch.setattr(database, "_conn", None)
     database.init_db(tmp_path / "test.db")
+
+    # Repeat suppression is module-level state. Without clearing it, one test
+    # raising a condition would silently suppress the same condition in the
+    # next test, and the failure would look like a bug in the alert logic.
+    alerts.reset_suppression()
+
+    from backend import auth
+    auth.reset_rate_limits()
     yield
     if database._conn is not None:
         database._conn.close()

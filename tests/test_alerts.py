@@ -188,3 +188,93 @@ def test_every_alert_carries_an_actionable_instruction():
         assert alert is not None
         assert len(alert["recommended_action"]) > 20
         assert alert["title"]
+
+
+# --------------------------------------------------------- repeat suppression
+
+def test_the_same_condition_is_only_logged_once_per_window():
+    """
+    A persisting fault produces an alert on every reading. Without suppression
+    the simulator writes about 40 identical rows a minute and the history
+    becomes unreadable.
+    """
+    from backend.alerts import alert_signature, reset_suppression, should_log
+    from backend.thresholds import evaluate_rules
+
+    reset_suppression()
+    hits = evaluate_rules(features(torque=75, rot_speed=1400))
+    signature = alert_signature("Fault", hits)
+
+    assert should_log(signature, now=0.0) is True       # first time, always
+    assert should_log(signature, now=1.5) is False      # next tick, suppressed
+    assert should_log(signature, now=30.0) is False
+
+
+def test_a_persisting_condition_is_restated_after_the_window():
+    from backend.alerts import reset_suppression, should_log
+    from backend import config
+
+    reset_suppression()
+    assert should_log("Fault|power_high:Fault", now=0.0) is True
+    later = config.ALERT_REPEAT_SECONDS + 1
+    assert should_log("Fault|power_high:Fault", now=later) is True
+
+
+def test_a_different_condition_is_never_suppressed():
+    """Suppression must not hide a new problem that starts during an old one."""
+    from backend.alerts import reset_suppression, should_log
+
+    reset_suppression()
+    assert should_log("Fault|power_high:Fault", now=0.0) is True
+    assert should_log("Fault|cooling:Fault", now=0.1) is True
+    assert should_log("Warning|tool_wear:Warning", now=0.2) is True
+
+
+def test_the_signature_ignores_measured_values():
+    """
+    Two readings of the same condition differ in their numbers, so the
+    signature has to key on which rules tripped, not on the message text.
+    """
+    from backend.alerts import alert_signature
+    from backend.thresholds import evaluate_rules
+
+    a = alert_signature("Fault", evaluate_rules(features(torque=75, rot_speed=1400)))
+    b = alert_signature("Fault", evaluate_rules(features(torque=76, rot_speed=1390)))
+    assert a == b
+
+
+def test_build_alert_returns_a_signature():
+    _, alert = build_alert(model_status="Normal", confidence=0.9,
+                           features=features(tool_wear=245))
+    assert alert["_signature"]
+    assert "tool_wear" in alert["_signature"]
+
+
+def test_a_flickering_trend_does_not_re_log_the_underlying_fault():
+    """
+    Trend rules come and go as the fit wobbles near its threshold. If they were
+    part of the suppression key, each flicker would re-log the measured fault
+    and the alert history would fill up with the same overload again and again.
+    """
+    from backend.alerts import alert_signature
+    from backend.thresholds import RuleHit, evaluate_rules
+
+    measured = evaluate_rules(features(torque=75, rot_speed=1400))
+    rising = RuleHit("trend_power_rising", "Warning", "Load is climbing", "", "")
+    falling = RuleHit("trend_power_falling", "Warning", "Load is falling", "", "")
+
+    plain = alert_signature("Fault", measured)
+    with_rising = alert_signature("Fault", measured + [rising])
+    with_falling = alert_signature("Fault", measured + [falling])
+
+    assert plain == with_rising == with_falling
+
+
+def test_trend_only_alerts_keep_their_own_identity():
+    """Two different projections must not suppress each other."""
+    from backend.alerts import alert_signature
+    from backend.thresholds import RuleHit
+
+    cooling = RuleHit("trend_temp_diff_falling", "Warning", "Cooling", "", "")
+    power = RuleHit("trend_power_rising", "Warning", "Load", "", "")
+    assert alert_signature("Warning", [cooling]) != alert_signature("Warning", [power])
