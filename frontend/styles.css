@@ -1,0 +1,265 @@
+/* Machine Health Monitor — dashboard styling.
+   Colour is load-bearing here, not decoration: green / amber / red map directly
+   onto Normal / Warning / Fault, the same three classes the model predicts. */
+
+:root {
+  --bg: #0f1116;
+  --panel: #171a21;
+  --panel-2: #1d212a;
+  --line: #282d38;
+  --text: #e6e9ef;
+  --muted: #8b93a5;
+
+  --normal: #2e9e5b;
+  --warning: #e0a800;
+  --fault: #e0463f;
+  --accent: #4c8dd6;
+
+  --radius: 10px;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+
+/* The browser's default `[hidden] { display: none }` is a user-agent rule, so
+ * ANY author rule that sets `display` beats it — `.login-wrap { display: grid }`
+ * would keep the login overlay painted on top of the dashboard even with the
+ * hidden attribute set. This re-asserts it so `element.hidden = true` in app.js
+ * actually hides things. */
+[hidden] { display: none !important; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+h1, h2, h3 { font-weight: 600; }
+code { font-family: var(--mono); background: var(--panel-2); padding: 1px 5px;
+       border-radius: 4px; font-size: 0.88em; }
+.muted { color: var(--muted); }
+.center { text-align: center; }
+.error { color: var(--fault); font-size: 0.9rem; margin: 4px 0 0; }
+
+/* ---------------- Login ---------------- */
+.login-wrap {
+  min-height: 100vh; display: grid; place-items: center; padding: 24px;
+}
+.login-card {
+  width: 100%; max-width: 380px; background: var(--panel);
+  border: 1px solid var(--line); border-radius: var(--radius); padding: 28px;
+}
+.login-brand { display: flex; align-items: center; gap: 10px; }
+.login-brand h1 { font-size: 1.15rem; margin: 0; }
+.login-card p.muted { margin: 6px 0 20px; font-size: 0.9rem; }
+.login-card label {
+  display: block; font-size: 0.78rem; text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--muted); margin: 14px 0 5px;
+}
+.login-card input {
+  width: 100%; padding: 10px 12px; background: var(--bg); color: var(--text);
+  border: 1px solid var(--line); border-radius: 7px; font-size: 0.95rem;
+}
+.login-card input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.login-card button {
+  width: 100%; margin-top: 20px; padding: 11px; background: var(--accent);
+  color: #fff; border: 0; border-radius: 7px; font-size: 0.95rem;
+  font-weight: 600; cursor: pointer;
+}
+.login-card button:hover { filter: brightness(1.1); }
+.login-card button:disabled { opacity: 0.6; cursor: progress; }
+.hint { font-size: 0.8rem; color: var(--muted); margin-top: 16px; text-align: center; }
+
+/* ---------------- Status dot ---------------- */
+.dot { width: 11px; height: 11px; border-radius: 50%; display: inline-block; flex: none; }
+.dot-normal  { background: var(--normal);  box-shadow: 0 0 9px var(--normal); }
+.dot-warning { background: var(--warning); box-shadow: 0 0 9px var(--warning); }
+.dot-fault   { background: var(--fault);   box-shadow: 0 0 9px var(--fault);
+               animation: pulse 1.1s ease-in-out infinite; }
+.dot-unknown { background: var(--muted); }
+@keyframes pulse { 50% { opacity: 0.35; } }
+
+/* ---------------- Layout ---------------- */
+.topbar {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 12px; padding: 12px 22px; background: var(--panel);
+  border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 10;
+  flex-wrap: wrap;
+}
+.topbar-left, .topbar-right { display: flex; align-items: center; gap: 10px; }
+.topbar-right { font-size: 0.85rem; }
+.tag {
+  font-family: var(--mono); font-size: 0.72rem; text-transform: uppercase;
+  letter-spacing: 0.05em; background: var(--panel-2); border: 1px solid var(--line);
+  padding: 2px 8px; border-radius: 20px; color: var(--muted);
+}
+main { max-width: 1180px; margin: 0 auto; padding: 22px; }
+.section-title {
+  font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--muted); margin: 28px 0 10px; display: flex;
+  align-items: center; gap: 10px; font-weight: 600;
+}
+.panel {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 16px;
+}
+
+/* ---------------- Status banner ---------------- */
+.banner {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 20px; padding: 22px 26px; border-radius: var(--radius);
+  border: 1px solid var(--line); background: var(--panel);
+  border-left-width: 6px; flex-wrap: wrap;
+}
+.banner-normal  { border-left-color: var(--normal); }
+.banner-warning { border-left-color: var(--warning); }
+.banner-fault   { border-left-color: var(--fault); }
+.banner-unknown { border-left-color: var(--muted); }
+.banner-status {
+  font-size: 2rem; font-weight: 700; letter-spacing: 0.02em; line-height: 1.1;
+}
+.banner-normal  .banner-status { color: var(--normal); }
+.banner-warning .banner-status { color: var(--warning); }
+.banner-fault   .banner-status { color: var(--fault); }
+.banner-sub { color: var(--muted); font-size: 0.9rem; margin-top: 4px; }
+.banner-conf { text-align: right; }
+.conf-value { font-family: var(--mono); font-size: 1.7rem; font-weight: 600; }
+.conf-label { font-size: 0.72rem; color: var(--muted); text-transform: uppercase;
+              letter-spacing: 0.05em; }
+
+/* ---------------- Recommended action ---------------- */
+.action-card {
+  margin-top: 14px; background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 18px 20px;
+}
+.action-card h3 { margin: 0 0 4px; font-size: 1rem; }
+.action-card .muted { font-size: 0.85rem; font-family: var(--mono); margin: 0; }
+.action-body { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+.action-label {
+  font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--muted); font-weight: 600;
+}
+.action-body p { margin: 6px 0 0; }
+
+/* ---------------- Remaining useful life ---------------- */
+.rul-card {
+  display: flex; gap: 26px; flex-wrap: wrap; align-items: center;
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 18px 22px; border-left-width: 4px;
+  border-left-color: var(--muted);
+}
+.rul-card.is-ok       { border-left-color: var(--normal); }
+.rul-card.is-warning  { border-left-color: var(--warning); }
+.rul-card.is-critical { border-left-color: var(--fault); }
+
+.rul-main { flex: 1 1 300px; min-width: 260px; }
+.rul-value { display: flex; align-items: baseline; gap: 8px; }
+.rul-value span {
+  font-family: var(--mono); font-size: 2.1rem; font-weight: 700;
+  font-variant-numeric: tabular-nums; line-height: 1.1;
+}
+.rul-value em { font-style: normal; font-size: 0.82rem; color: var(--muted); }
+.rul-card.is-ok       .rul-value span { color: var(--normal); }
+.rul-card.is-warning  .rul-value span { color: var(--warning); }
+.rul-card.is-critical .rul-value span { color: var(--fault); }
+
+/* The bar shows life CONSUMED, so it fills up as the tool wears out —
+   an emptying bar reads as "battery low" and gets ignored. */
+.rul-bar { height: 7px; background: var(--panel-2); border-radius: 4px;
+           margin-top: 12px; overflow: hidden; }
+.rul-bar i { display: block; height: 100%; width: 0; background: var(--normal);
+             border-radius: 4px; transition: width 0.5s ease, background 0.3s; }
+.rul-card.is-warning  .rul-bar i { background: var(--warning); }
+.rul-card.is-critical .rul-bar i { background: var(--fault); }
+.rul-meta { margin-top: 9px; font-size: 0.8rem; color: var(--muted); }
+
+.rul-side { display: flex; flex-direction: column; gap: 9px; flex: 0 1 300px; }
+.rul-item { display: flex; justify-content: space-between; gap: 14px;
+            border-bottom: 1px solid var(--line); padding-bottom: 7px; }
+.rul-item:last-child { border-bottom: 0; padding-bottom: 0; }
+.rul-item .k { font-size: 0.76rem; color: var(--muted); }
+.rul-item .v { font-family: var(--mono); font-size: 0.82rem; text-align: right; }
+
+/* ---------------- Sensor tiles ---------------- */
+.tiles {
+  display: grid; gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+}
+.tile {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 14px 16px;
+}
+.tile-label { font-size: 0.76rem; color: var(--muted); text-transform: uppercase;
+              letter-spacing: 0.04em; }
+.tile-value { display: flex; align-items: baseline; gap: 5px; margin-top: 6px; }
+.tile-value span { font-family: var(--mono); font-size: 1.5rem; font-weight: 600;
+                   font-variant-numeric: tabular-nums; }
+.tile-value em { font-style: normal; font-size: 0.78rem; color: var(--muted); }
+.tile-bar { height: 4px; background: var(--panel-2); border-radius: 3px;
+            margin-top: 10px; overflow: hidden; }
+.tile-bar i { display: block; height: 100%; width: 0; background: var(--accent);
+              border-radius: 3px; transition: width 0.4s ease, background 0.3s; }
+.tile-limit { font-size: 0.7rem; color: var(--muted); margin-top: 7px;
+              font-family: var(--mono); }
+.tile.is-warning i { background: var(--warning); }
+.tile.is-fault   i { background: var(--fault); }
+.tile.is-warning { border-color: color-mix(in srgb, var(--warning) 45%, var(--line)); }
+.tile.is-fault   { border-color: color-mix(in srgb, var(--fault) 45%, var(--line)); }
+
+/* ---------------- Chart ---------------- */
+#chart { width: 100%; display: block; }
+.legend { display: flex; gap: 12px; align-items: center; font-weight: 400;
+          text-transform: none; letter-spacing: 0; }
+.sw { width: 14px; height: 3px; border-radius: 2px; display: inline-block;
+      margin-right: 4px; vertical-align: middle; }
+.sw-power { background: #4c8dd6; }
+.sw-temp  { background: #58c0b0; }
+.sw-rul   { background: #c07fd6; }
+.chart-status { display: flex; gap: 1px; margin-top: 8px; height: 6px; }
+.chart-status i { flex: 1; border-radius: 1px; }
+
+/* ---------------- Controls ---------------- */
+.controls { display: flex; flex-wrap: wrap; gap: 22px; align-items: center; }
+.control-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.control-label { font-size: 0.72rem; text-transform: uppercase; color: var(--muted);
+                 letter-spacing: 0.05em; margin-right: 2px; }
+.btn {
+  background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
+  border-radius: 7px; padding: 7px 13px; font-size: 0.85rem; cursor: pointer;
+}
+.btn:hover { border-color: var(--accent); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn-warn { border-color: color-mix(in srgb, var(--warning) 50%, var(--line)); }
+.btn-ghost { background: none; border: 1px solid var(--line); color: var(--muted);
+             border-radius: 7px; padding: 5px 11px; font-size: 0.82rem; cursor: pointer; }
+.btn-ghost:hover { color: var(--text); }
+.control-msg { width: 100%; margin: 0; font-size: 0.85rem; min-height: 1.2em; }
+
+/* ---------------- Alerts table ---------------- */
+table.alerts { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+table.alerts th {
+  text-align: left; font-size: 0.7rem; text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--muted); padding: 0 10px 9px;
+  border-bottom: 1px solid var(--line); font-weight: 600;
+}
+table.alerts td { padding: 10px; border-bottom: 1px solid var(--line);
+                  vertical-align: top; }
+table.alerts tr:last-child td { border-bottom: 0; }
+td.ts { font-family: var(--mono); font-size: 0.78rem; color: var(--muted);
+        white-space: nowrap; }
+td.detail { font-family: var(--mono); font-size: 0.76rem; color: var(--muted); }
+.sev { font-weight: 600; font-size: 0.76rem; text-transform: uppercase;
+       letter-spacing: 0.04em; white-space: nowrap; }
+.sev-Warning  { color: var(--warning); }
+.sev-Critical { color: var(--fault); }
+
+.foot { margin: 32px 0 40px; font-size: 0.78rem; color: var(--muted);
+        line-height: 1.6; border-top: 1px solid var(--line); padding-top: 16px; }
+
+@media (max-width: 620px) {
+  .banner-status { font-size: 1.5rem; }
+  main { padding: 14px; }
+  table.alerts { font-size: 0.78rem; }
+}

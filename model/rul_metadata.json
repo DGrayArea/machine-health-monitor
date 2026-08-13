@@ -1,0 +1,45 @@
+{
+  "trained_at": "2026-08-13T01:09:32",
+  "model_type": "RandomForestRegressor",
+  "target": "rul_minutes",
+  "features": [
+    "type_code",
+    "air_temp",
+    "process_temp",
+    "rot_speed",
+    "torque",
+    "tool_wear",
+    "temp_diff",
+    "power",
+    "strain"
+  ],
+  "scores": {
+    "full": {
+      "mae": 0.37843078555673376,
+      "rmse": 2.099097113298262,
+      "r2": 0.9989186842136519,
+      "mae_live_only": 0.3828384291971139
+    },
+    "without_tool_wear": {
+      "mae": 49.643036298884965,
+      "rmse": 60.00659979731937,
+      "r2": 0.11633934596468387,
+      "mae_live_only": 46.18838059597805
+    }
+  },
+  "uncertainty": {
+    "coverage_1p96_sigma": 0.993,
+    "median_sigma_min": 0.0
+  },
+  "feature_importance": {
+    "tool_wear": 0.9974,
+    "torque": 0.0012,
+    "strain": 0.0007,
+    "power": 0.0005,
+    "rot_speed": 0.0001,
+    "type_code": 0.0,
+    "process_temp": 0.0,
+    "temp_diff": 0.0,
+    "air_temp": 0.0
+  }
+}

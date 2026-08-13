@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Machine Health Monitor</title>
+  <!-- ?v= is a cache buster. Bump it after editing styles.css or app.js and the
+       browser is forced to fetch the new file instead of reusing a cached copy. -->
+  <link rel="stylesheet" href="/styles.css?v=5" />
+</head>
+<body>
+
+<!-- ===================== LOGIN ===================== -->
+<div id="login-view" class="login-wrap">
+  <form id="login-form" class="login-card" autocomplete="on">
+    <div class="login-brand">
+      <span class="dot dot-normal"></span>
+      <h1>Machine Health Monitor</h1>
+    </div>
+    <p class="muted">Predictive maintenance dashboard — sign in to continue.</p>
+
+    <label for="username">Username</label>
+    <input id="username" name="username" type="text" autocomplete="username"
+           value="engineer" required />
+
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password"
+           autocomplete="current-password" required />
+
+    <button type="submit" id="login-btn">Sign in</button>
+    <p id="login-error" class="error" hidden></p>
+    <p class="hint">Demo account: <code>engineer</code> / <code>maintenance123</code></p>
+  </form>
+</div>
+
+<!-- ===================== DASHBOARD ===================== -->
+<div id="dash-view" hidden>
+
+  <header class="topbar">
+    <div class="topbar-left">
+      <span id="status-dot" class="dot dot-unknown"></span>
+      <strong>Machine Health Monitor</strong>
+      <span class="tag" id="machine-state">—</span>
+    </div>
+    <div class="topbar-right">
+      <span class="muted" id="conn-state">connecting…</span>
+      <span class="muted">|</span>
+      <span class="muted" id="who">—</span>
+      <button id="logout-btn" class="btn-ghost">Sign out</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- ---- Status banner ---- -->
+    <section id="status-banner" class="banner banner-unknown">
+      <div class="banner-main">
+        <div class="banner-status" id="banner-status">WAITING</div>
+        <div class="banner-sub" id="banner-sub">Waiting for the first reading…</div>
+      </div>
+      <div class="banner-conf">
+        <div class="conf-value" id="banner-conf">—</div>
+        <div class="conf-label">model confidence</div>
+      </div>
+    </section>
+
+    <!-- ---- Recommended action (only when not Normal) ---- -->
+    <section id="action-card" class="action-card" hidden>
+      <h3 id="action-title">—</h3>
+      <p id="action-detail" class="muted"></p>
+      <div class="action-body">
+        <span class="action-label">Recommended action</span>
+        <p id="action-text"></p>
+      </div>
+    </section>
+
+    <!-- ---- Remaining useful life ---- -->
+    <h2 class="section-title">Remaining useful life</h2>
+    <section class="rul-card" id="rul-card">
+      <div class="rul-main">
+        <div class="rul-value">
+          <span id="rul-min">—</span><em>min of cutting left</em>
+        </div>
+        <div class="rul-bar"><i id="rul-fill"></i></div>
+        <div class="rul-meta" id="rul-meta">Waiting for the first reading…</div>
+      </div>
+      <div class="rul-side">
+        <div class="rul-item">
+          <span class="k">At the observed wear rate</span>
+          <span class="v" id="rul-wallclock">—</span>
+        </div>
+        <div class="rul-item">
+          <span class="k">Limited by</span>
+          <span class="v" id="rul-binding">—</span>
+        </div>
+        <div class="rul-item">
+          <span class="k">Model cross-check</span>
+          <span class="v" id="rul-model">—</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---- Live sensor tiles ---- -->
+    <h2 class="section-title">Live sensor readings</h2>
+    <section class="tiles" id="tiles">
+      <div class="tile" data-key="air_temp">
+        <div class="tile-label">Air temperature</div>
+        <div class="tile-value"><span>—</span><em>°C</em></div>
+        <div class="tile-bar"><i></i></div>
+      </div>
+      <div class="tile" data-key="process_temp">
+        <div class="tile-label">Process temperature</div>
+        <div class="tile-value"><span>—</span><em>°C</em></div>
+        <div class="tile-bar"><i></i></div>
+      </div>
+      <div class="tile" data-key="temp_diff">
+        <div class="tile-label">Temp difference (ΔT)</div>
+        <div class="tile-value"><span>—</span><em>°C</em></div>
+        <div class="tile-bar"><i></i></div>
+        <div class="tile-limit">fault below 8.6 °C</div>
+      </div>
+      <div class="tile" data-key="rot_speed">
+        <div class="tile-label">Rotational speed</div>
+        <div class="tile-value"><span>—</span><em>rpm</em></div>
+        <div class="tile-bar"><i></i></div>
+      </div>
+      <div class="tile" data-key="torque">
+        <div class="tile-label">Torque</div>
+        <div class="tile-value"><span>—</span><em>N·m</em></div>
+        <div class="tile-bar"><i></i></div>
+      </div>
+      <div class="tile" data-key="power">
+        <div class="tile-label">Spindle power</div>
+        <div class="tile-value"><span>—</span><em>kW</em></div>
+        <div class="tile-bar"><i></i></div>
+        <div class="tile-limit">envelope 3.5–9.0 kW</div>
+      </div>
+      <div class="tile" data-key="tool_wear">
+        <div class="tile-label">Tool wear</div>
+        <div class="tile-value"><span>—</span><em>min</em></div>
+        <div class="tile-bar"><i></i></div>
+        <div class="tile-limit">tool life ≈ 200 min</div>
+      </div>
+      <div class="tile" data-key="strain">
+        <div class="tile-label">Mechanical strain</div>
+        <div class="tile-value"><span>—</span><em>min·N·m</em></div>
+        <div class="tile-bar"><i></i></div>
+        <div class="tile-limit">overstrain at 12000 min·N·m</div>
+      </div>
+    </section>
+
+    <!-- ---- Trend chart ---- -->
+    <h2 class="section-title">
+      Trend
+      <span class="legend">
+        <i class="sw sw-power"></i>power
+        <i class="sw sw-temp"></i>ΔT
+        <i class="sw sw-rul"></i>remaining life
+      </span>
+    </h2>
+    <section class="panel">
+      <canvas id="chart" height="220"></canvas>
+      <div class="chart-status" id="chart-status"></div>
+    </section>
+
+    <!-- ---- Controls ---- -->
+    <h2 class="section-title">Simulator &amp; reports</h2>
+    <section class="panel controls">
+      <div class="control-group">
+        <span class="control-label">Simulator</span>
+        <button id="sim-start" class="btn">Start</button>
+        <button id="sim-stop" class="btn">Stop</button>
+      </div>
+      <div class="control-group">
+        <span class="control-label">Inject fault (demo)</span>
+        <button class="btn btn-warn" data-inject="overheat">Cooling fault</button>
+        <button class="btn btn-warn" data-inject="overload">Power overload</button>
+        <button class="btn btn-warn" data-inject="tool_wear">Worn tool</button>
+        <button class="btn" data-inject="reset">Reset</button>
+      </div>
+      <div class="control-group">
+        <span class="control-label">Download report</span>
+        <button id="dl-csv" class="btn btn-primary">CSV</button>
+        <button id="dl-pdf" class="btn btn-primary">PDF</button>
+      </div>
+      <p id="control-msg" class="muted control-msg"></p>
+    </section>
+
+    <!-- ---- Alert history ---- -->
+    <h2 class="section-title">
+      Alert history
+      <span class="muted" id="alert-count"></span>
+    </h2>
+    <section class="panel">
+      <table class="alerts">
+        <thead>
+          <tr>
+            <th>Time</th><th>Severity</th><th>Condition</th>
+            <th>Detail</th><th>Recommended action</th>
+          </tr>
+        </thead>
+        <tbody id="alert-body">
+          <tr><td colspan="5" class="muted center">No alerts yet.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <footer class="foot">
+      Random Forest classifier + deterministic physical threshold rules.
+      Threshold rules can escalate the model's verdict, never suppress it.
+      Every prediction and alert is written to the audit log.
+    </footer>
+  </main>
+</div>
+
+<script src="/app.js?v=5"></script>
+</body>
+</html>

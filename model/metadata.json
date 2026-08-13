@@ -1,0 +1,48 @@
+{
+  "trained_at": "2026-08-13T01:09:25",
+  "model_type": "RandomForestClassifier",
+  "n_estimators": 300,
+  "features": [
+    "type_code",
+    "air_temp",
+    "process_temp",
+    "rot_speed",
+    "torque",
+    "tool_wear",
+    "temp_diff",
+    "power",
+    "strain"
+  ],
+  "classes": [
+    "Fault",
+    "Normal",
+    "Warning"
+  ],
+  "n_train": 8000,
+  "n_test": 2000,
+  "scores": {
+    "random_forest": {
+      "accuracy": 0.992,
+      "macro_f1": 0.9657427312368548,
+      "fault_f1": 0.912
+    },
+    "logistic_regression": {
+      "accuracy": 0.717,
+      "macro_f1": 0.5917072274272633,
+      "fault_f1": 0.36298932384341637
+    }
+  },
+  "cv_macro_f1_mean": 0.945668309027133,
+  "cv_macro_f1_std": 0.011308436011531775,
+  "feature_importance": {
+    "tool_wear": 0.1915,
+    "rot_speed": 0.1903,
+    "temp_diff": 0.1684,
+    "power": 0.1324,
+    "torque": 0.1318,
+    "strain": 0.1098,
+    "air_temp": 0.0462,
+    "process_temp": 0.0242,
+    "type_code": 0.0055
+  }
+}

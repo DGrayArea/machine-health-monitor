@@ -1,0 +1,62 @@
+{
+  "accuracy": 0.992,
+  "confusion_matrix": {
+    "labels": [
+      "Normal",
+      "Warning",
+      "Fault"
+    ],
+    "matrix": [
+      [
+        1336,
+        3,
+        0
+      ],
+      [
+        2,
+        591,
+        0
+      ],
+      [
+        1,
+        10,
+        57
+      ]
+    ]
+  },
+  "report": {
+    "Fault": {
+      "precision": 1.0,
+      "recall": 0.8382352941176471,
+      "f1-score": 0.912,
+      "support": 68.0
+    },
+    "Normal": {
+      "precision": 0.9977595220313666,
+      "recall": 0.9977595220313666,
+      "f1-score": 0.9977595220313666,
+      "support": 1339.0
+    },
+    "Warning": {
+      "precision": 0.9784768211920529,
+      "recall": 0.9966273187183811,
+      "f1-score": 0.9874686716791979,
+      "support": 593.0
+    },
+    "accuracy": 0.992,
+    "macro avg": {
+      "precision": 0.9920787810744732,
+      "recall": 0.9442073782891316,
+      "f1-score": 0.9657427312368548,
+      "support": 2000.0
+    },
+    "weighted avg": {
+      "precision": 0.9921183774834438,
+      "recall": 0.992,
+      "f1-score": 0.9917924611528822,
+      "support": 2000.0
+    }
+  },
+  "missed_faults": 1,
+  "false_alarms": 0
+}

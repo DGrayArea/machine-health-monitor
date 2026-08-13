@@ -1,0 +1,30 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.DS_Store
+
+# --- Raw data ------------------------------------------------------------
+# data/raw/ai4i2020.csv IS committed (512 KB). It is the ground truth every
+# result in the README is derived from, and committing it means the project
+# still reproduces if the UCI mirror moves. The zip it came in does not.
+data/raw/*.zip
+
+# --- Reproducible build products ----------------------------------------
+# Regenerated in seconds by the pipeline, so they are build output, not source:
+#   data/processed/  <- scripts/clean_data.py      (1.4 MB)
+#   model/*.pkl      <- scripts/train_model.py     (22 MB of pickles)
+#
+# Pickles especially do not belong in git: they are opaque binaries that change
+# completely on every retrain, git keeps every version forever, and joblib.load
+# executes arbitrary code — so a committed .pkl is something a cloner must trust.
+data/processed/
+model/*.pkl
+
+# --- Generated artefacts -------------------------------------------------
+# Figures and metrics ARE committed — they are the evidence in the write-up.
+# Runtime logs and dashboard exports are not.
+outputs/logs/
+outputs/exports/
+*.db
+*.sqlite3
