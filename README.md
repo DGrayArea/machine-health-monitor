@@ -1,5 +1,10 @@
 # Machine Health Monitoring / Predictive Maintenance
 
+[![CI](https://github.com/DGrayArea/machine-health-monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/DGrayArea/machine-health-monitor/actions/workflows/ci.yml)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/API-FastAPI-009688)](https://fastapi.tiangolo.com/)
+[![Dataset: AI4I 2020](https://img.shields.io/badge/dataset-AI4I%202020-orange)](https://archive.ics.uci.edu/dataset/601/ai4i+2020+predictive+maintenance+dataset)
+
 A predictive maintenance system for a milling machine. It reads sensor data,
 classifies the machine as Normal, Warning or Fault, estimates how much cutting
 life the tool has left, raises alerts with a recommended action, logs everything,
@@ -8,6 +13,19 @@ and shows it on a live dashboard.
 Built as a mechatronics project. The thresholds all come from documented machine
 physics rather than numbers picked to make the results look good, so each one can
 be justified.
+
+![Dashboard showing a spindle approaching its power limit with one minute of tool life left](docs/dashboard.png)
+
+*Live dashboard. The spindle is at 8.62 kW against a 9.0 kW limit, so the power
+and tool-wear tiles are outlined amber and the banner reads Warning. Remaining
+useful life is down to 1 minute and the bar has gone red. The trend chart shows
+a full tool life: remaining life (pink) falling to zero, the tool change, then
+the next tool starting fresh. The strip underneath is the verdict on every
+reading in the window.*
+
+The CI badge runs the whole pipeline from the committed raw CSV on Python 3.10
+and 3.12 — clean, train both models, run the tests, regenerate the figures — so
+it reflects whether the project actually reproduces from a clean checkout.
 
 ---
 

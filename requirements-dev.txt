@@ -1,0 +1,9 @@
+# Development-only tools. Not needed to run the system or the tests, so they are
+# kept out of requirements.txt and out of CI.
+#
+#   pip install -r requirements-dev.txt
+
+# Drives the installed Google Chrome to capture dashboard screenshots.
+# Only the Python package is needed — scripts/capture_dashboard.py uses
+# channel="chrome", so there is no 130 MB Chromium download.
+playwright==1.47.0

@@ -1,0 +1,65 @@
+name: CI
+
+# Runs the whole pipeline from the committed raw CSV, then the test suite.
+# That means the badge is a real claim: it says the project reproduces from a
+# clean checkout, not just that the tests happened to pass on one laptop.
+#
+# This is why data/raw/ai4i2020.csv is committed and model/*.pkl is not. CI has
+# the input and rebuilds the models itself, so a stale pickle can never make a
+# broken pipeline look green.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.10 is the floor: the code uses `X | None` annotations at runtime.
+        # 3.12 guards against the project quietly breaking on newer Pythons.
+        python-version: ["3.10", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Clean and label the dataset
+        run: python scripts/clean_data.py
+
+      - name: Train the health classifier
+        run: python scripts/train_model.py
+
+      - name: Train the RUL regressor
+        run: python scripts/train_rul_model.py
+
+      - name: Run the test suite
+        run: python -m pytest tests/ -q
+
+      # The figures are the evidence in the write-up, so a broken plotting path
+      # should fail CI rather than being noticed the night before a deadline.
+      - name: Regenerate the evaluation figures
+        run: python scripts/evaluate_model.py
+
+      - name: Upload figures and metrics
+        if: matrix.python-version == '3.12'
+        uses: actions/upload-artifact@v4
+        with:
+          name: outputs
+          path: outputs/
+          retention-days: 14
