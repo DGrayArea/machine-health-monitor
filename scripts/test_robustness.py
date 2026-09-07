@@ -18,7 +18,7 @@ The four corruptions, and why these four
                   uncalibrated or ageing sensor does. Unlike noise this does not
                   average out, so it is usually the more damaging of the two.
     quantisation  Rounding to a coarse step, as a low-resolution ADC would.
-                  A 10-bit converter over a 100 °C span gives about 0.1 °C steps.
+                  A 10-bit converter over a 100 K span gives about 0.1 K steps.
     dropout       A channel freezes and repeats its last good value, which is
                   what a dead bus or a stuck sensor looks like downstream. It is
                   the nastiest because nothing about the value looks wrong.
